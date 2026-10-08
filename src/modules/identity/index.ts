@@ -1,4 +1,4 @@
-import { Router } from "express"
+import { Router, type Request } from "express"
 
 import { route } from "../../platform/http/validation.ts"
 import type { AppModule } from "../module.ts"
@@ -26,6 +26,13 @@ import {
   tokenBody,
 } from "./schemas.ts"
 import { revokeByRefreshToken } from "./sessions.ts"
+
+/**
+ * The caller's IP address. Behind the hosting proxy (staging/production)
+ * Express reads it from X-Forwarded-For ("trust proxy" in app.ts).
+ */
+const clientIp = (req: Request) =>
+  req.ip ?? req.socket.remoteAddress ?? "unknown"
 
 /**
  * Identity (BE-02): signup, login, sessions, invitations, password reset,
@@ -56,9 +63,9 @@ export const identityModule: AppModule = {
     )
     router.post(
       "/auth/login",
-      route({ body: loginBody }, async ({ body }) => ({
+      route({ body: loginBody }, async ({ body, req }) => ({
         status: 200,
-        body: await login(body, authDeps),
+        body: await login(body, authDeps, clientIp(req)),
       }))
     )
     router.post(
@@ -123,7 +130,7 @@ export const identityModule: AppModule = {
       "/me/password",
       auth,
       route({ body: changePasswordBody }, async ({ req, body }) => {
-        await changePassword(body, getAuth(req), authDeps)
+        await changePassword(body, getAuth(req), authDeps, clientIp(req))
         return { status: 204 }
       })
     )

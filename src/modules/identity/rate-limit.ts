@@ -21,7 +21,11 @@ export const AttemptModel = model("Attempt", attemptSchema)
 
 export type Limit = { max: number; windowMs: number }
 
-/** Login: 10 failed attempts per email in 15 minutes (Trello BE-02 AC). */
+/**
+ * Login: 10 failed attempts per email AND IP address in 15 minutes (Trello
+ * BE-02 AC). Keyed by both, so failures from one address can't lock the
+ * account's owner out from another.
+ */
 export const LOGIN_LIMIT: Limit = { max: 10, windowMs: 15 * 60 * 1000 }
 /** Forgot password: 5 emails per address per hour (prevents mail bombing). */
 export const RESET_REQUEST_LIMIT: Limit = { max: 5, windowMs: 60 * 60 * 1000 }
@@ -63,6 +67,17 @@ export async function recordAttempt(
   }
 }
 
+export function loginKey(email: string, ip: string): string {
+  return `login:${email}|${ip}`
+}
+
 export async function clearAttempts(key: string): Promise<void> {
   await AttemptModel.deleteOne({ _id: key })
+}
+
+/** Clears an email's login counters from every IP (after a password reset). */
+export async function clearLoginAttemptsForEmail(email: string): Promise<void> {
+  // Escape regex characters in the email (".", "+"), then match the prefix.
+  const prefix = `login:${email}|`.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  await AttemptModel.deleteMany({ _id: { $regex: `^${prefix}` } })
 }

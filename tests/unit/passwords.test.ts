@@ -42,6 +42,13 @@ describe("password rule", () => {
         email: "rania.k2026@acme.example",
       })
     ).toBe("CONTAINS_PERSONAL_INFO")
+    // The email's domain never counts, only the part before @.
+    expect(
+      passwordProblem("gmail-com-sunrise", { email: "sara.harbi@gmail.com" })
+    ).toBeUndefined()
+    expect(
+      passwordProblem("acme-example-river", { email: "rania@acme.example" })
+    ).toBeUndefined()
     // Name parts shorter than 3 letters ("Al") don't count.
     expect(passwordProblem("totally-al-fine", person)).toBeUndefined()
   })

@@ -74,7 +74,7 @@ export const PASSWORD_MAX_LENGTH = 128
 /**
  * The password rule (Trello BE-02, same as the frontend's password field):
  * 10–128 characters, not a common password, and not containing the person's
- * name or email. Returns the field error code, or undefined when it passes.
+ * name or the local part of their email (3+ character parts; never the domain). Returns the field error code, or undefined when it passes.
  * Length is also checked by the Zod schemas; this is the full rule for the
  * service layer.
  */
@@ -88,14 +88,14 @@ export function passwordProblem(
   const lower = password.toLowerCase()
   if (COMMON_PASSWORDS.has(lower)) return "TOO_COMMON"
 
-  // The email, its local part and each word of it ("sara.harbi" → sara, harbi),
-  // and each word of the name. Words shorter than 3 characters don't count.
+  // The email's local part (before @) and each word of it ("sara.harbi" →
+  // sara.harbi, sara, harbi), and each word of the name. Only parts of 3+
+  // characters count, and the domain never does ("gmail", "com" are fine).
   const words = (text: string) => text.split(/[^\p{L}\p{N}]+/u)
   const personal: string[] = []
   if (person.email) {
-    const email = person.email.toLowerCase()
-    const local = email.split("@")[0] ?? ""
-    personal.push(email, local, ...words(local))
+    const local = person.email.toLowerCase().split("@")[0] ?? ""
+    personal.push(local, ...words(local))
   }
   if (person.name) personal.push(...words(person.name.toLowerCase()))
   if (personal.some((part) => part.length >= 3 && lower.includes(part))) {

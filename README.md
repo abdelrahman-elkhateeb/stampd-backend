@@ -164,8 +164,8 @@ Tenant-owned models declare `companyId: tenantIdField()` and use `schema.plugin(
 - **Access token:** a JWT (HS256), valid 15 minutes, sent as `Authorization: Bearer …`. Each request re-checks the session and the user's status and role in the database, so logout, deactivation and role changes apply at once.
 - **Refresh token:** valid 30 days. It is rotated on every refresh, and MongoDB stores only its SHA-256.
 - **Grace window:** for 20 s after a rotation, the previous refresh token returns the **same** new pair (parallel refreshes from several frontend servers). Reuse after that revokes the whole session.
-- **Rate limit:** 10 failed logins per email in 15 minutes give `429 TOO_MANY_ATTEMPTS` with `Retry-After`. The counters live in MongoDB, so the limit holds across servers.
-- **Passwords:** scrypt hashes. The rule is 10–128 characters, not a common password, and not containing the person's name or email.
+- **Rate limit:** 10 failed logins for the same email **from the same IP address** in 15 minutes give `429 TOO_MANY_ATTEMPTS` with `Retry-After`. Failures from one address never lock the owner out from another, and a password reset clears the email's counters from every address. The counters live in MongoDB, so the limit holds across servers.
+- **Passwords:** scrypt hashes. The rule is 10–128 characters, not a common password, and not containing a word of the person's name or the local part of their email (before @, or a word of it). Only parts of 3+ characters count, and the email domain never does.
 - **Invite and reset links:** single-use, valid 7 days and 1 hour. Until BE-15 sends emails, they are logged outside production (`invite link (logged until BE-15 sends emails)`).
 
 **Errors.** Every error response is `{ code, message, fieldErrors? }` (conventions on Trello BE-00). Throw `apiErrors.*` from `src/platform/http/errors.ts`. Anything else becomes `500 INTERNAL_ERROR` with no details for the client; it is logged with its stack and passed to the error reporter (`src/platform/monitoring/error-reporter.ts`, where BE-16 connects Sentry or similar). Malformed or oversized JSON becomes `422` on the field `body`.

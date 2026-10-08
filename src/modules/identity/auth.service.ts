@@ -27,6 +27,8 @@ import {
 import {
   blockedForSeconds,
   clearAttempts,
+  clearLoginAttemptsForEmail,
+  loginKey,
   LOGIN_LIMIT,
   recordAttempt,
   RESET_REQUEST_LIMIT,
@@ -143,10 +145,12 @@ export async function signup(
 
 export async function login(
   input: { email: string; password: string },
-  deps: AuthDeps
+  deps: AuthDeps,
+  /** The caller's IP: failed attempts are counted per email + IP. */
+  ip: string
 ): Promise<AuthTokens> {
   const email = normalizeEmail(input.email)
-  const limitKey = `login:${email}`
+  const limitKey = loginKey(email, ip)
   const wait = await blockedForSeconds(limitKey, LOGIN_LIMIT, deps.clock)
   if (wait > 0) throw apiErrors.tooManyAttempts(wait)
 
@@ -445,7 +449,7 @@ export async function resetPassword(
     await user.save()
     // A reset signs the user out everywhere, then starts one new session.
     await revokeUserSessions(user._id, "PASSWORD_RESET")
-    await clearAttempts(`login:${user.email}`)
+    await clearLoginAttemptsForEmail(user.email)
     return startSession(
       { userId: user._id, companyId: user.companyId },
       sessionDeps(deps)
@@ -458,7 +462,8 @@ export async function resetPassword(
 export async function changePassword(
   input: { currentPassword: string; newPassword: string },
   auth: { userId: string; companyId: string; sessionId: string },
-  deps: AuthDeps
+  deps: AuthDeps,
+  ip: string
 ): Promise<void> {
   const user = await UserModel.findOne({
     _id: auth.userId,
@@ -466,7 +471,7 @@ export async function changePassword(
   }).select("+passwordHash")
   if (!user?.passwordHash) throw apiErrors.unauthenticated()
 
-  const limitKey = `login:${user.email}`
+  const limitKey = loginKey(user.email, ip)
   const wait = await blockedForSeconds(limitKey, LOGIN_LIMIT, deps.clock)
   if (wait > 0) throw apiErrors.tooManyAttempts(wait)
   if (!(await verifyPassword(input.currentPassword, user.passwordHash))) {

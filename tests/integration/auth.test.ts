@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest"
 
-import { issueInvitation } from "../../src/modules/identity/auth.service.ts"
+import {
+  issueInvitation,
+  login as loginService,
+} from "../../src/modules/identity/auth.service.ts"
 import { UserModel } from "../../src/modules/identity/user.model.ts"
 import { CompanyModel } from "../../src/modules/organization/company.model.ts"
 import {
@@ -163,7 +166,7 @@ describe("POST /auth/login", () => {
     })
   })
 
-  it("blocks an email for 15 minutes after 10 failed attempts", async () => {
+  it("blocks an email from an IP for 15 minutes after 10 failed attempts", async () => {
     const signup = signupBody()
     await api.post("/auth/signup", signup)
     for (let i = 0; i < 10; i += 1) {
@@ -176,6 +179,52 @@ describe("POST /auth/login", () => {
 
     api.clock.advance(15 * 60 * 1000 + 1)
     expect((await login(signup.email, signup.password)).status).toBe(200)
+  })
+
+  it("counts failures per email AND IP, so one address can't lock the owner out", async () => {
+    const signup = signupBody()
+    await api.post("/auth/signup", signup)
+    const attacker = "203.0.113.9"
+    const owner = "198.51.100.7"
+    const attempt = (password: string, ip: string) =>
+      loginService({ email: signup.email, password }, api.authDeps(), ip)
+
+    for (let i = 0; i < 10; i += 1) {
+      await expect(attempt("wrong-password", attacker)).rejects.toMatchObject({
+        code: "INVALID_CREDENTIALS",
+      })
+    }
+    await expect(attempt(signup.password, attacker)).rejects.toMatchObject({
+      code: "TOO_MANY_ATTEMPTS",
+    })
+    // The owner, from their own address, still gets in.
+    await expect(attempt(signup.password, owner)).resolves.toMatchObject({
+      expiresIn: 900,
+    })
+  })
+
+  it("clears the lockout from every IP after a password reset", async () => {
+    const signup = signupBody()
+    await api.post("/auth/signup", signup)
+    const ip = "203.0.113.10"
+    const attempt = (password: string) =>
+      loginService({ email: signup.email, password }, api.authDeps(), ip)
+    for (let i = 0; i < 10; i += 1) {
+      await attempt("wrong-password").catch(() => {})
+    }
+    await expect(attempt(signup.password)).rejects.toMatchObject({
+      code: "TOO_MANY_ATTEMPTS",
+    })
+
+    await api.post("/auth/password/forgot", { email: signup.email })
+    const token = lastLoggedToken("reset-password")
+    await api.post("/auth/password/reset", {
+      token,
+      password: "calm-orchard-evening",
+    })
+    await expect(attempt("calm-orchard-evening")).resolves.toMatchObject({
+      expiresIn: 900,
+    })
   })
 
   it("validates the body", async () => {
