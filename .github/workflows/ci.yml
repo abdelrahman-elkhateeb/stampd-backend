@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Lint, typecheck, build, unit + integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # The real MongoDB binary used by the integration tests (mongodb-memory-server).
+      - name: Cache the MongoDB test binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: mongodb-binaries-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm build
+      - run: pnpm test
+      - run: pnpm test:integration
+
+  deploy-staging:
+    name: Deploy to staging
+    needs: checks
+    # Only after every check passed on main, and only once staging is set up
+    # (repository variable STAGING_DEPLOY_ENABLED=true; see README › Staging).
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.STAGING_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=sha,prefix=
+            type=raw,value=staging
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      # The host pulls ghcr.io/<repo>:staging and restarts; the container runs
+      # migrations before starting (Dockerfile CMD).
+      - name: Trigger the staging deploy
+        run: curl --fail --silent --show-error -X POST "$STAGING_DEPLOY_HOOK_URL"
+        env:
+          STAGING_DEPLOY_HOOK_URL: ${{ secrets.STAGING_DEPLOY_HOOK_URL }}
+
+      - name: Staging answers /health with the database up
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent "$STAGING_URL/health" | grep -q '"database":"UP"'; then
+              echo "Staging is healthy."; exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::Staging did not report healthy within 5 minutes."; exit 1
+        env:
+          STAGING_URL: ${{ vars.STAGING_URL }}

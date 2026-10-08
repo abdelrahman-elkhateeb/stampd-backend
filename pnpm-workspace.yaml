@@ -1,0 +1,10 @@
+# Makes this repository its own pnpm root (otherwise pnpm can adopt a package.json
+# found in a parent folder as the workspace root).
+packages:
+  - "."
+
+# Dependency install scripts are blocked unless listed here.
+allowBuilds:
+  esbuild: true
+  # Downloads the MongoDB test binary lazily on first use instead.
+  mongodb-memory-server: false

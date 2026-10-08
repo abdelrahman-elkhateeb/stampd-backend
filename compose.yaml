@@ -1,0 +1,26 @@
+# Local MongoDB for development: `docker compose up -d`.
+# A single-node replica set (rs0): MongoDB only supports transactions on replica
+# sets, and later tickets (audit history, leave ledger) need them. The health
+# check initiates the replica set on first start.
+# Connect with MONGODB_URI=mongodb://localhost:27017/stampd?directConnection=true
+services:
+  mongo:
+    image: mongo:8
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - "try { rs.status().ok } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'localhost:27017' }] }).ok }"
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  mongo-data:
