@@ -161,7 +161,7 @@ Which calendar day an instant falls on depends on the company timezone: use `pla
   Never edit a migration that has run; add a new one.
 
 - **Seed:** `pnpm db:seed` upserts the demo company, with the same id and name as the frontend's mock data. Later tickets extend it.
-- **What BE-01 creates:** the `companies` collection (the tenant root, with its timezone). Everything else arrives with its ticket.
+- **What BE-01 creates:** the `companies` collection (the tenant root) with its timezone and working days. New companies default to **Sunday–Thursday** (`DEFAULT_WORKING_DAYS` in `company.model.ts`); the Admin changes it in settings (BE-05). Everything else arrives with its ticket.
 - **Transactions:** use a replica set (compose and Atlas provide one); the integration tests prove transactions work.
 
 ## Tests

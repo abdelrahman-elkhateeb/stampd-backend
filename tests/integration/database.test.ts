@@ -94,10 +94,39 @@ describe("migrations", () => {
   })
 })
 
+describe("company defaults", () => {
+  it("gives a new company a Sunday–Thursday working week", async () => {
+    const company = await CompanyModel.create({
+      name: "New Co",
+      timezone: "Asia/Dubai",
+    })
+    expect(company.workingDays).toEqual(["SUN", "MON", "TUE", "WED", "THU"])
+  })
+
+  it("keeps a working week the Admin chose", async () => {
+    const company = await CompanyModel.create({
+      name: "Mon–Fri Co",
+      timezone: "Europe/London",
+      workingDays: ["MON", "TUE", "WED", "THU", "FRI"],
+    })
+    expect(company.workingDays).toEqual(["MON", "TUE", "WED", "THU", "FRI"])
+  })
+
+  it("rejects unknown weekdays, an empty week and repeated days", async () => {
+    // Deliberately invalid values (the types only allow real weekdays).
+    for (const workingDays of [["FUNDAY"], [], ["SUN", "SUN"]] as never[]) {
+      await expect(
+        CompanyModel.create({ name: "Bad", timezone: "UTC", workingDays })
+      ).rejects.toThrow()
+    }
+  })
+})
+
 describe("seed", () => {
-  it("created the demo company", async () => {
+  it("created the demo company, working Sunday–Thursday", async () => {
     const company = await CompanyModel.findById(DEMO_COMPANY._id).lean()
     expect(company).toMatchObject(DEMO_COMPANY)
+    expect(company?.workingDays).toEqual(["SUN", "MON", "TUE", "WED", "THU"])
     expect(company?.createdAt).toBeInstanceOf(Date)
   })
 
