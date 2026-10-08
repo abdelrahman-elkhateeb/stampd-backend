@@ -2,6 +2,7 @@ import type { Router } from "express"
 
 import type { Config } from "../config/env.ts"
 import type { Logger } from "../platform/logging/logger.ts"
+import type { Clock } from "../platform/time/clock.ts"
 
 /** What every module can use. Later tickets add services here (BE-02 adds the caller). */
 export type AppDeps = {
@@ -9,6 +10,8 @@ export type AppDeps = {
   logger: Logger
   /** true when the database answers (platform/db/connection.ts pingDatabase) */
   checkDatabase: () => Promise<boolean>
+  /** "now" for anything time-sensitive (token expiry, rate limits); tests move it */
+  clock: Clock
 }
 
 /**

@@ -5,8 +5,8 @@
  * `message` is for logs only. The request ID travels in the X-Request-Id
  * header (set on every response), not in the body.
  *
- * New codes are added here when a ticket defines them, and the frontend adds
- * their translations.
+ * New codes are added here when a ticket defines them, and written on that
+ * ticket's Trello card so the frontend can translate them.
  */
 export type ErrorCode =
   | "VALIDATION_FAILED"
@@ -19,23 +19,24 @@ export type ErrorCode =
   | "NOT_FOUND"
   | "CONFLICT"
   | "INTERNAL_ERROR"
+  // BE-02: invite and password-reset links
+  | "TOKEN_INVALID"
+  | "TOKEN_EXPIRED"
 
-export type FieldErrorCode =
-  | "REQUIRED"
-  | "INVALID_FORMAT"
-  | "TOO_SHORT"
-  | "TOO_LONG"
-  | "OUT_OF_RANGE"
-  | "ALREADY_EXISTS"
-
-export const FIELD_ERROR_CODES: readonly FieldErrorCode[] = [
+export const FIELD_ERROR_CODES = [
   "REQUIRED",
   "INVALID_FORMAT",
   "TOO_SHORT",
   "TOO_LONG",
   "OUT_OF_RANGE",
   "ALREADY_EXISTS",
-]
+  // BE-02: password policy and change password
+  "TOO_COMMON",
+  "CONTAINS_PERSONAL_INFO",
+  "INCORRECT",
+] as const
+
+export type FieldErrorCode = (typeof FIELD_ERROR_CODES)[number]
 
 export type FieldError = {
   field: string
@@ -54,17 +55,21 @@ export class ApiError extends Error {
   readonly status: number
   readonly code: ErrorCode
   readonly fieldErrors: FieldError[]
+  /** Extra response headers, e.g. Retry-After on 429 */
+  readonly headers: Record<string, string>
 
   constructor(
     status: number,
     code: ErrorCode,
     message: string,
-    fieldErrors: FieldError[] = []
+    fieldErrors: FieldError[] = [],
+    headers: Record<string, string> = {}
   ) {
     super(message)
     this.status = status
     this.code = code
     this.fieldErrors = fieldErrors
+    this.headers = headers
   }
 
   toBody(): ErrorBody {
@@ -85,8 +90,26 @@ export const apiErrors = {
       "Request validation failed",
       fieldErrors
     ),
+  /** A single field error, e.g. fieldError("email", "ALREADY_EXISTS", "email is already registered") */
+  fieldError: (field: string, code: FieldErrorCode, message: string) =>
+    new ApiError(422, "VALIDATION_FAILED", "Request validation failed", [
+      { field, code, message },
+    ]),
   unauthenticated: (message = "Missing or expired access token") =>
     new ApiError(401, "UNAUTHENTICATED", message),
+  invalidCredentials: () =>
+    new ApiError(401, "INVALID_CREDENTIALS", "Invalid credentials"),
+  sessionExpired: (message = "Refresh token invalid") =>
+    new ApiError(401, "SESSION_EXPIRED", message),
+  accountDeactivated: () =>
+    new ApiError(403, "ACCOUNT_DEACTIVATED", "Account deactivated"),
+  tooManyAttempts: (retryAfterSeconds: number) =>
+    new ApiError(429, "TOO_MANY_ATTEMPTS", "Too many attempts", [], {
+      "Retry-After": String(Math.max(1, Math.ceil(retryAfterSeconds))),
+    }),
+  tokenInvalid: () =>
+    new ApiError(404, "TOKEN_INVALID", "Token not found or already used"),
+  tokenExpired: () => new ApiError(410, "TOKEN_EXPIRED", "Token expired"),
   forbidden: (message = "Not allowed for this role") =>
     new ApiError(403, "FORBIDDEN", message),
   notFound: (message = "Not found") => new ApiError(404, "NOT_FOUND", message),

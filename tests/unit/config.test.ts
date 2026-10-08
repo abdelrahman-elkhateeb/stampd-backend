@@ -5,6 +5,14 @@ import { ConfigError, loadConfig } from "../../src/config/env.ts"
 const valid = {
   APP_ENV: "local",
   MONGODB_URI: "mongodb://stampd:secret-pw@localhost:27017/stampd",
+  AUTH_TOKEN_SECRET: "local-dev-secret-change-me-0123456789abcdef",
+}
+
+const deployed = {
+  APP_ENV: "staging",
+  MONGODB_URI: "mongodb+srv://u:p@cluster0.example.net/stampd",
+  AUTH_TOKEN_SECRET: "Zr8w1Q2pLk9sXv4nHc7bTe3yUa6mJd5f",
+  WEB_APP_URL: "https://staging.stampd.example/",
 }
 
 describe("loadConfig", () => {
@@ -15,6 +23,8 @@ describe("loadConfig", () => {
       host: "0.0.0.0",
       mongodbUri: valid.MONGODB_URI,
       logLevel: "info",
+      authTokenSecret: valid.AUTH_TOKEN_SECRET,
+      webAppUrl: "http://localhost:3000",
     })
   })
 
@@ -22,33 +32,53 @@ describe("loadConfig", () => {
     expect(loadConfig({ ...valid, PORT: "8080" }).port).toBe(8080)
   })
 
-  it("accepts mongodb+srv URIs (Atlas)", () => {
-    expect(() =>
-      loadConfig({
-        ...valid,
-        MONGODB_URI: "mongodb+srv://u:p@cluster0.example.net/stampd",
-      })
-    ).not.toThrow()
+  it("accepts a deployed configuration and trims the web app URL's trailing slash", () => {
+    const config = loadConfig(deployed)
+    expect(config.appEnv).toBe("staging")
+    expect(config.webAppUrl).toBe("https://staging.stampd.example")
   })
 
   it("rejects missing required variables, naming each one", () => {
     expect(() => loadConfig({})).toThrow(ConfigError)
-    expect(() => loadConfig({})).toThrow(/APP_ENV[\s\S]*MONGODB_URI/)
+    expect(() => loadConfig({})).toThrow(
+      /APP_ENV[\s\S]*MONGODB_URI[\s\S]*AUTH_TOKEN_SECRET/
+    )
   })
 
-  it("rejects unknown environments and non-MongoDB URIs", () => {
+  it("rejects unknown environments, non-MongoDB URIs and short secrets", () => {
     expect(() => loadConfig({ ...valid, APP_ENV: "dev" })).toThrow(/APP_ENV/)
     expect(() =>
       loadConfig({ ...valid, MONGODB_URI: "postgres://x@localhost/db" })
     ).toThrow(/MONGODB_URI/)
+    expect(() => loadConfig({ ...valid, AUTH_TOKEN_SECRET: "short" })).toThrow(
+      /AUTH_TOKEN_SECRET/
+    )
   })
 
-  it("never puts a value in the error (the URI can hold a password)", () => {
+  it("refuses the example secret and a localhost web app URL in staging/production", () => {
+    expect(() =>
+      loadConfig({ ...deployed, AUTH_TOKEN_SECRET: valid.AUTH_TOKEN_SECRET })
+    ).toThrow(/AUTH_TOKEN_SECRET/)
+    expect(() =>
+      loadConfig({
+        ...deployed,
+        APP_ENV: "production",
+        WEB_APP_URL: "http://localhost:3000",
+      })
+    ).toThrow(/WEB_APP_URL/)
+  })
+
+  it("never puts a value in the error (URIs and secrets are sensitive)", () => {
     try {
-      loadConfig({ ...valid, PORT: "not-a-port", LOG_LEVEL: "loud" })
+      loadConfig({
+        ...valid,
+        PORT: "not-a-port",
+        AUTH_TOKEN_SECRET: "tiny-secret",
+      })
       expect.unreachable()
     } catch (error) {
       expect(String(error)).not.toContain("secret-pw")
+      expect(String(error)).not.toContain("tiny-secret")
     }
   })
 

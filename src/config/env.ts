@@ -4,20 +4,43 @@ import { z } from "zod"
  * The only place that reads process.env (lint enforces it). Everything else
  * receives a typed, validated Config. The app refuses to start on bad config.
  */
-const configSchema = z.object({
-  APP_ENV: z.enum(["local", "test", "staging", "production"]),
-  PORT: z.coerce.number().int().min(1).max(65_535).default(4000),
-  HOST: z.string().min(1).default("0.0.0.0"),
-  MONGODB_URI: z
-    .string()
-    .regex(
-      /^mongodb(\+srv)?:\/\//,
-      "must start with mongodb:// or mongodb+srv://"
-    ),
-  LOG_LEVEL: z
-    .enum(["error", "warn", "info", "debug", "silent"])
-    .default("info"),
-})
+const configSchema = z
+  .object({
+    APP_ENV: z.enum(["local", "test", "staging", "production"]),
+    PORT: z.coerce.number().int().min(1).max(65_535).default(4000),
+    HOST: z.string().min(1).default("0.0.0.0"),
+    MONGODB_URI: z
+      .string()
+      .regex(
+        /^mongodb(\+srv)?:\/\//,
+        "must start with mongodb:// or mongodb+srv://"
+      ),
+    LOG_LEVEL: z
+      .enum(["error", "warn", "info", "debug", "silent"])
+      .default("info"),
+    /** Signs access tokens and derives rotated refresh tokens. At least 32 characters. */
+    AUTH_TOKEN_SECRET: z.string().min(32, "must be at least 32 characters"),
+    /** The web app's base URL, used to build invite and reset links. */
+    WEB_APP_URL: z.url().default("http://localhost:3000"),
+  })
+  .superRefine((env, ctx) => {
+    const deployed = env.APP_ENV === "staging" || env.APP_ENV === "production"
+    if (deployed && /change-me|local-dev/i.test(env.AUTH_TOKEN_SECRET)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["AUTH_TOKEN_SECRET"],
+        message:
+          "must be a real secret in staging/production, not the example value",
+      })
+    }
+    if (deployed && /localhost|127\.0\.0\.1/.test(env.WEB_APP_URL)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["WEB_APP_URL"],
+        message: "must be the deployed web app URL in staging/production",
+      })
+    }
+  })
 
 export type AppEnv = z.infer<typeof configSchema>["APP_ENV"]
 export type LogLevel = z.infer<typeof configSchema>["LOG_LEVEL"]
@@ -28,6 +51,8 @@ export type Config = Readonly<{
   host: string
   mongodbUri: string
   logLevel: LogLevel
+  authTokenSecret: string
+  webAppUrl: string
 }>
 
 export class ConfigError extends Error {
@@ -36,7 +61,7 @@ export class ConfigError extends Error {
 
 /**
  * Validates the environment. Error messages name the variable and the rule,
- * never the value (MONGODB_URI can contain a password).
+ * never the value (MONGODB_URI and AUTH_TOKEN_SECRET are secrets).
  */
 export function loadConfig(
   env: Record<string, string | undefined> = process.env
@@ -57,5 +82,7 @@ export function loadConfig(
     host: e.HOST,
     mongodbUri: e.MONGODB_URI,
     logLevel: e.LOG_LEVEL,
+    authTokenSecret: e.AUTH_TOKEN_SECRET,
+    webAppUrl: e.WEB_APP_URL.replace(/\/$/, ""),
   })
 }

@@ -31,10 +31,10 @@ export const DEFAULT_WORKING_DAYS: readonly Weekday[] = [
  * The tenant. Every tenant-owned collection added by later tickets stores the
  * company's id, and BE-02 scopes every query by it.
  *
- * BE-01 keeps only what the foundation needs: the tenant, its timezone (which
- * decides what "today" means for attendance and leave) and its working days
- * (default Sun–Thu). The other settings (work hours, grace, leave year, logo)
- * arrive with BE-05.
+ * Kept so far: the tenant, its timezone (which decides what "today" means for
+ * attendance and leave), its week start and working days (default Sun–Thu),
+ * and the signup's terms acceptance. The other settings (work hours, grace,
+ * leave year, logo) arrive with BE-05.
  */
 const companySchema = new Schema(
   {
@@ -46,6 +46,12 @@ const companySchema = new Schema(
       required: true,
       validate: { validator: isTimeZone, message: "must be an IANA timezone" },
     },
+    /** Terms of service + privacy policy accepted at signup (BE-02). */
+    termsVersion: { type: String },
+    termsAcceptedAt: { type: Date },
+    termsAcceptedBy: { type: String },
+    /** First day of the week in calendars and date pickers (BE-05 makes it editable). */
+    weekStart: { type: String, enum: WEEKDAYS, default: "SUN" },
     workingDays: {
       type: [{ type: String, enum: WEEKDAYS }],
       default: () => [...DEFAULT_WORKING_DAYS],

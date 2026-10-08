@@ -54,7 +54,7 @@ export function errorHandler(reporter: ErrorReporter): ErrorRequestHandler {
         code: apiError.code,
       })
     }
-    res.status(apiError.status).json(apiError.toBody())
+    res.set(apiError.headers).status(apiError.status).json(apiError.toBody())
   }
 }
 

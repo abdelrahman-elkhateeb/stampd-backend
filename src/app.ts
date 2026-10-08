@@ -6,6 +6,7 @@ import type { AppModule } from "./modules/module.ts"
 import { errorHandler, notFoundHandler } from "./platform/http/error-handler.ts"
 import { requestContext } from "./platform/http/request-context.ts"
 import type { Logger } from "./platform/logging/logger.ts"
+import { systemClock, type Clock } from "./platform/time/clock.ts"
 import {
   noopErrorReporter,
   type ErrorReporter,
@@ -19,6 +20,8 @@ export type CreateAppOptions = {
   errorReporter?: ErrorReporter
   /** Defaults to every domain module (src/modules/index.ts). */
   modules?: readonly AppModule[]
+  /** Defaults to the system clock; tests pass a clock they can move. */
+  clock?: Clock
 }
 
 /**
@@ -41,7 +44,12 @@ export function createApp(options: CreateAppOptions): Express {
   app.use(requestContext(logger))
   app.use(express.json({ limit: "1mb" }))
 
-  const deps = { config, logger, checkDatabase: options.checkDatabase }
+  const deps = {
+    config,
+    logger,
+    checkDatabase: options.checkDatabase,
+    clock: options.clock ?? systemClock,
+  }
   for (const module of options.modules ?? MODULES) {
     const router = module.routes(deps)
     if (router) app.use(router)

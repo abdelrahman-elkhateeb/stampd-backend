@@ -3,6 +3,14 @@ import mongoose from "mongoose"
 // A filter on a field the schema doesn't have is an error, not a silent no-op
 // that matches everything (a classic tenant-leak bug).
 mongoose.set("strictQuery", "throw")
+// Inside connection.transaction(fn), every query uses the transaction's
+// session automatically, so services don't pass { session } around.
+mongoose.set("transactionAsyncLocalStorage", true)
+
+/** Runs fn in a MongoDB transaction (needs a replica set: compose, Atlas, tests). */
+export function withTransaction<T>(fn: () => Promise<T>): Promise<T> {
+  return mongoose.connection.transaction(fn)
+}
 
 /**
  * The one MongoDB connection (Mongoose's default connection, where every

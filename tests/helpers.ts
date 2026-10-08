@@ -12,6 +12,8 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
     host: "127.0.0.1",
     mongodbUri: "mongodb://127.0.0.1:27017/stampd_test",
     logLevel: "silent",
+    authTokenSecret: "test-secret-0123456789abcdefghijklmnopqrstuv",
+    webAppUrl: "http://localhost:3000",
     ...overrides,
   }
 }
