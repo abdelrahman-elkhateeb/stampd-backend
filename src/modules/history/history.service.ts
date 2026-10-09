@@ -20,6 +20,10 @@ export const HISTORY_ACTIONS = {
   // Leave balances (BE-08 ledger): automatic changes vs manual adjustments
   "leaveBalance.changed": { entityType: "LEAVE_BALANCE", reason: "optional" },
   "leaveBalance.adjusted": { entityType: "LEAVE_BALANCE", reason: "required" },
+  "leaveBalance.entitlementSet": {
+    entityType: "LEAVE_BALANCE",
+    reason: "optional",
+  },
   // Requests (BE-09)
   "request.statusChanged": { entityType: "REQUEST", reason: "optional" },
   // Employees (BE-03, BE-06)
@@ -41,6 +45,10 @@ export const HISTORY_ACTIONS = {
   "holiday.added": { entityType: "COMPANY_SETTINGS", reason: "optional" },
   "holiday.changed": { entityType: "COMPANY_SETTINGS", reason: "optional" },
   "holiday.removed": { entityType: "COMPANY_SETTINGS", reason: "optional" },
+  // Leave types (BE-08): on the company settings' history
+  "leaveType.added": { entityType: "COMPANY_SETTINGS", reason: "optional" },
+  "leaveType.changed": { entityType: "COMPANY_SETTINGS", reason: "optional" },
+  "leaveType.removed": { entityType: "COMPANY_SETTINGS", reason: "optional" },
   // Departments (BE-06): also on the company settings' history
   "department.added": { entityType: "COMPANY_SETTINGS", reason: "optional" },
   "department.renamed": { entityType: "COMPANY_SETTINGS", reason: "optional" },

@@ -20,3 +20,9 @@ export {
   AttendanceDayModel,
   AttendanceSessionModel,
 } from "../../modules/attendance/attendance.model.ts"
+export {
+  LeaveBalanceModel,
+  LeaveLedgerEntryModel,
+  LeaveTypeModel,
+  LeaveYearRunModel,
+} from "../../modules/leave/leave.model.ts"

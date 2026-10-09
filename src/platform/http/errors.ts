@@ -31,6 +31,10 @@ export type ErrorCode =
   // BE-07: attendance
   | "ATTENDANCE_NOT_TRACKED"
   | "NO_OPEN_SESSION"
+  // BE-08: leave types and balances
+  | "LEAVE_TYPE_IN_USE"
+  | "LEAVE_TYPE_NOT_TRACKED"
+  | "INSUFFICIENT_BALANCE"
 
 export const FIELD_ERROR_CODES = [
   "REQUIRED",

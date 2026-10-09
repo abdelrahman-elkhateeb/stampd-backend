@@ -1,5 +1,6 @@
 import { model, Schema, type InferSchemaType } from "mongoose"
 
+import { appendOnly } from "../../platform/db/append-only.ts"
 import { uuidV7 } from "../../platform/db/schema.ts"
 import { tenantIdField, tenantScoped } from "../../platform/db/tenant.ts"
 
@@ -58,24 +59,9 @@ export class HistoryImmutableError extends Error {
     super("History entries are append-only: they can't be edited or deleted")
   }
 }
-
-const CHANGES =
-  /^(updateOne|updateMany|findOneAndUpdate|replaceOne|findOneAndReplace|deleteOne|deleteMany|findOneAndDelete)$/
-historyEntrySchema.pre(CHANGES, { document: false, query: true }, () => {
-  throw new HistoryImmutableError()
-})
-historyEntrySchema.pre(
-  ["updateOne", "deleteOne"],
-  { document: true, query: false },
-  () => {
-    throw new HistoryImmutableError()
-  }
-)
-historyEntrySchema.pre("save", function () {
-  if (!this.isNew) throw new HistoryImmutableError()
-})
-historyEntrySchema.pre("bulkWrite", () => {
-  throw new HistoryImmutableError()
+historyEntrySchema.plugin(appendOnly, {
+  what: "History entries",
+  error: HistoryImmutableError,
 })
 
 export type HistoryEntry = InferSchemaType<typeof historyEntrySchema>

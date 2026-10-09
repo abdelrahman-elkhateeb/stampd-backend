@@ -1,8 +1,9 @@
 import type { Migration } from "../migrations.ts"
+import { defaultLeaveTypes } from "./2026-10-10-default-leave-types.ts"
 
 /**
- * Data migrations, applied in this order, each once. None yet: BE-01 only
- * creates indexes (from the models). Add a file per migration and list it here:
+ * Data migrations, applied in this order, each once. Add a file per
+ * migration and list it here:
  *
  *   // 2026-10-20-backfill-department-ids.ts
  *   export const backfillDepartmentIds: Migration = {
@@ -12,4 +13,4 @@ import type { Migration } from "../migrations.ts"
  *
  * Never edit or remove a migration that has run anywhere; add a new one.
  */
-export const MIGRATIONS: readonly Migration[] = []
+export const MIGRATIONS: readonly Migration[] = [defaultLeaveTypes]

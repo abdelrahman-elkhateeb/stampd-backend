@@ -13,6 +13,7 @@ import {
   CompanyModel,
   DEFAULT_WORKING_DAYS,
 } from "../../modules/organization/company.model.ts"
+import { seedDefaultLeaveTypes } from "../../modules/leave/leave-types.service.ts"
 import { DepartmentModel } from "../../modules/organization/department.model.ts"
 import { EmployeeModel } from "../../modules/organization/employee.model.ts"
 
@@ -138,6 +139,8 @@ export async function seedDemoData(
     },
     { upsert: true, runValidators: true }
   )
+
+  await seedDefaultLeaveTypes(companyId)
 
   const passwordHash = await hashPassword(DEMO_PASSWORD)
   for (const account of DEMO_ACCOUNTS) {

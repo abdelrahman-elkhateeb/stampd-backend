@@ -68,6 +68,10 @@ export const PERMISSIONS = {
   attendanceExceptions: { view: ADMIN_ONLY },
   /** Leave balances (BE-08) and leave requests (BE-10); edit = cancel your own */
   leave: { view: PERSONAL, create: SELF, edit: SELF, approve: APPROVERS },
+  /** Leave types and policies (BE-08): everyone reads (forms), Admins change */
+  leaveTypes: { view: EVERYONE, edit: ADMIN_ONLY },
+  /** Balance adjustments and entitlement overrides (BE-08); reading uses "leave" */
+  leaveBalances: { edit: ADMIN_ONLY },
   /** WFH, business trips, permissions and other requests (BE-09) */
   requests: { view: PERSONAL, create: SELF, edit: SELF, approve: APPROVERS },
   /** Reports, limited to the data the caller may see (BE-13) */

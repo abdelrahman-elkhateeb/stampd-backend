@@ -2,7 +2,7 @@
 
 API for **Stampd**, the Employee Ops Platform (attendance, leave, requests and approvals for GCC teams).
 
-**Status:** BE-01 (foundation), BE-02 (authentication, company signup, tenant isolation) BE-03 (roles, data scopes, permission checks), BE-04 (change history), BE-05 (company settings, work calendar, holidays, image uploads) BE-06 (departments, employee management, offboarding) and BE-07 (attendance: check-in/out, daily status, end-of-day close, corrections) are in place. Endpoints: health, signup, login, sessions, invitations, password reset, current user, change password, a record's history, settings, calendar, holidays, logo and photo uploads, departments, employees and attendance (table below). BE-03 adds no endpoints; it adds the checks every later endpoint uses. The other business endpoints arrive with BE-08 … BE-15.
+**Status:** BE-01 (foundation), BE-02 (authentication, company signup, tenant isolation) BE-03 (roles, data scopes, permission checks), BE-04 (change history), BE-05 (company settings, work calendar, holidays, image uploads) BE-06 (departments, employee management, offboarding) BE-07 (attendance: check-in/out, daily status, end-of-day close, corrections) and BE-08 (leave types, policies, balance ledger) are in place. Endpoints: health, signup, login, sessions, invitations, password reset, current user, change password, a record's history, settings, calendar, holidays, logo and photo uploads, departments, employees, attendance, leave types and balances (table below). BE-03 adds no endpoints; it adds the checks every later endpoint uses. The other business endpoints arrive with BE-09 … BE-15.
 
 **Stack:** TypeScript · Express 5 · MongoDB · Mongoose · Zod. Those three (express, mongoose, zod) are the only runtime dependencies. Node 24, pnpm.
 
@@ -74,8 +74,14 @@ curl -s -X POST http://localhost:4000/auth/login -H 'content-type: application/j
 | GET                   | `/attendance/employees/{id}/days/{date}`                                       | bearer                          | `200 { employee, day, sessions }`                                                                                              | BE-07  |
 | GET                   | `/attendance/exceptions?from&to&type=`                                         | bearer, Admin                   | `200 { items, meta }`: Missing Checkout and Absent                                                                             | BE-07  |
 | POST / PATCH / DELETE | `/attendance/employees/{id}/days/{date}/sessions`, `/attendance/sessions/{id}` | bearer, Admin                   | corrections with a required `reason` → day detail                                                                              | BE-07  |
+| GET                   | `/leave/types`                                                                 | bearer                          | `200 { items }` (every role; `?includeArchived=true` for Admins)                                                               | BE-08  |
+| POST / PATCH / DELETE | `/leave/types[/{id}]`                                                          | bearer, Admin                   | `201` / `200` / `204`; `409 LEAVE_TYPE_IN_USE` (archive instead)                                                               | BE-08  |
+| GET                   | `/leave/employees/{id}/balances?year=`                                         | bearer                          | `200 { year, items: [balance] }` (self / team / company)                                                                       | BE-08  |
+| GET                   | `/leave/employees/{id}/balances/{typeId}/entries`                              | bearer                          | `200 { balance, items, meta }`: the ledger                                                                                     | BE-08  |
+| POST                  | `/leave/employees/{id}/balances/{typeId}/adjustments`                          | bearer, Admin                   | `201` balance; `reason` required                                                                                               | BE-08  |
+| PUT                   | `/leave/employees/{id}/balances/{typeId}/entitlement`                          | bearer, Admin                   | `200` balance (override)                                                                                                       | BE-08  |
 
-Each ticket adds its endpoints to this table. The exact request and response bodies and error codes of every endpoint are on its Trello ticket (BE-02 for the identity endpoints, BE-04 for history, BE-05 for settings, holidays, calendar and uploads, BE-06 for departments and employees, BE-07 for attendance).
+Each ticket adds its endpoints to this table. The exact request and response bodies and error codes of every endpoint are on its Trello ticket (BE-02 for the identity endpoints, BE-04 for history, BE-05 for settings, holidays, calendar and uploads, BE-06 for departments and employees, BE-07 for attendance, BE-08 for leave types and balances).
 
 ## Scripts
 
@@ -135,9 +141,12 @@ src/
                             identity/accounts.ts: email, role, status
     attendance/             check-in/out, daily status engine (status.ts),  (BE-07)
                             views, corrections, end-of-day close job
-    leave/ requests/ reporting/ notifications/                            (BE-08 … BE-15)
+    leave/                  leave types, balance ledger (balance-math.ts, (BE-08)
+                            balance.service.ts), leave-year rollover job
+    requests/ reporting/ notifications/                                   (BE-09 … BE-15)
   platform/storage/files.ts image uploads: type check, storage, signed URLs (BE-05)
   platform/jobs.ts          background jobs started by server.ts (BE-07)
+  platform/db/append-only.ts  insert-only collections: history, leave ledger (BE-08)
   platform/csv.ts           CSV reader for imports (BE-06)
   types/express.d.ts        req.id, req.log and req.auth
 tests/unit, tests/integration
@@ -201,23 +210,26 @@ Tenant-owned models declare `companyId: tenantIdField()` and use `schema.plugin(
 - **team:** the caller's **active direct reports**, i.e. employees whose `managerId` is the caller. It is read from the database on every check, so a reassignment or role change applies on the next request. No skip-level; a deactivated employee drops out of the team (the Admin keeps access);
 - **company:** every employee of the caller's company.
 
-| Resource (ticket)                              | Action                     | Employee | Manager     | Admin/HR |
-| ---------------------------------------------- | -------------------------- | -------- | ----------- | -------- |
-| `employee` profile (BE-06)                     | view                       | self     | self + team | company  |
-|                                                | create / edit / delete     | —        | —           | company  |
-| `attendance` (BE-07)                           | view                       | self     | self + team | company  |
-|                                                | create (clock in/out)      | self     | self        | self     |
-|                                                | edit (corrections)         | —        | —           | company  |
-| `leave` (BE-08, BE-10), `requests` (BE-09)     | view                       | self     | self + team | company  |
-|                                                | create / edit (cancel own) | self     | self        | self     |
-|                                                | approve                    | —        | team        | company  |
-| `reports` (BE-13)                              | view                       | self     | self + team | company  |
-| `companySettings` incl. holidays, logo (BE-05) | view                       | company  | company     | company  |
-|                                                | edit                       | —        | —           | company  |
-| `employeePhoto` (BE-05)                        | edit                       | self     | self        | company  |
-| `employeeDirectory`: the list (BE-06)          | view                       | —        | team        | company  |
-| `attendanceExceptions` (BE-07)                 | view                       | —        | —           | company  |
-| `users`: invite, role, deactivate (BE-06)      | all                        | —        | —           | company  |
+| Resource (ticket)                                              | Action                     | Employee | Manager     | Admin/HR |
+| -------------------------------------------------------------- | -------------------------- | -------- | ----------- | -------- |
+| `employee` profile (BE-06)                                     | view                       | self     | self + team | company  |
+|                                                                | create / edit / delete     | —        | —           | company  |
+| `attendance` (BE-07)                                           | view                       | self     | self + team | company  |
+|                                                                | create (clock in/out)      | self     | self        | self     |
+|                                                                | edit (corrections)         | —        | —           | company  |
+| `leave` balances (BE-08), requests (BE-10), `requests` (BE-09) | view                       | self     | self + team | company  |
+|                                                                | create / edit (cancel own) | self     | self        | self     |
+|                                                                | approve                    | —        | team        | company  |
+| `reports` (BE-13)                                              | view                       | self     | self + team | company  |
+| `companySettings` incl. holidays, logo (BE-05)                 | view                       | company  | company     | company  |
+|                                                                | edit                       | —        | —           | company  |
+| `employeePhoto` (BE-05)                                        | edit                       | self     | self        | company  |
+| `employeeDirectory`: the list (BE-06)                          | view                       | —        | team        | company  |
+| `attendanceExceptions` (BE-07)                                 | view                       | —        | —           | company  |
+| `leaveTypes` (BE-08)                                           | view                       | company  | company     | company  |
+|                                                                | edit                       | —        | —           | company  |
+| `leaveBalances`: adjust, set entitlement (BE-08)               | edit                       | —        | —           | company  |
+| `users`: invite, role, deactivate (BE-06)                      | all                        | —        | —           | company  |
 
 **Answers:**
 
@@ -247,6 +259,27 @@ router.patch("/company/settings", auth, requirePermission("companySettings", "ed
 - **nothing:** everything else, i.e. other departments and colleagues' business trips and permissions.
 
 Every protected endpoint gets per-role tests like `tests/integration/access.test.ts`.
+
+**Leave balances (BE-08).** A balance is never stored as a number. It is computed from an append-only **ledger** (`leaveledgerentries`), so every figure can be explained entry by entry:
+
+- `ALLOWANCE`: the year's entitlement (and later corrections of it), ±;
+- `ADJUSTMENT`: an Admin's change, ±, with a required reason;
+- `RESERVATION`: held by a pending request;
+- `RELEASE`: a reservation ending (rejected, withdrawn or approved);
+- `DEDUCTION`: approved days, per date;
+- `RESTORATION`: days returned when an approved request is cancelled.
+
+`available = entitlement + adjustments − used − upcoming − pending`. Approved days are **upcoming** until their date passes, then **used** (`summarize()` in `balance-math.ts`).
+
+- **Entitlements** are one `leavebalances` record per employee, tracked type and leave year. They're created on first use or by the rollover job, from the type's default allowance, **pro-rated** for people joining during the year (rounded to 0.5 day). Admins can override them per employee. Nothing carries over automatically; an Admin adds carry-over as an adjustment.
+- **Leave year:** named by the calendar year it starts in, from the company's `leaveYearStartMonth` (January by default). The rollover job (every 15 minutes) opens each company's new year once.
+- **For leave requests (BE-10):** `reserveDays`, `releaseReservation`, `deductApprovedDays` and `restoreDays` in `balance.service.ts`.
+  - Each joins the caller's transaction and **locks the balance first** (`version` bump), so parallel requests are applied one after the other and can never spend the same days.
+  - When there isn't enough, they answer `409 INSUFFICIENT_BALANCE`, unless the type allows a negative balance.
+  - Untracked types (Unpaid) keep no balance and are never limited.
+- **Leave types:**
+  - New companies get Annual (21), Sick (30), Emergency (3) and Unpaid (untracked); existing companies get them through the `2026-10-10-default-leave-types` migration.
+  - A type that has been used can't be deleted or change its balance tracking (`409 LEAVE_TYPE_IN_USE`); archive it instead.
 
 **Attendance (BE-07).** Sessions (check-in … check-out, server time, IP and browser stored) roll up into one **AttendanceDay** per employee and company-calendar day.
 
@@ -387,6 +420,7 @@ Which calendar day an instant falls on depends on the company timezone: use `pla
   - BE-05: `holidays` (start/end dates), `storedfiles` (uploaded images); companies gain work hours, late grace, leave year start month, `logoFileId` and `timezoneHistory`; employees gain `photoFileId`. Existing companies read the defaults (09:00–17:00, grace 0, January).
   - BE-06: `departments` (unique name per company); employees gain phone, job title, employee code (unique per company when set), joining date, employment type and `tracksAttendance`; users gain `lastWorkingDay`.
   - BE-07: `attendancesessions` (unique open session per employee), `attendancedays` (unique per employee and day), `attendancecloseruns` (closed days per company). History ids are time-ordered UUIDs (v7), so entries from the same millisecond keep their order.
+  - BE-08: `leavetypes` (unique name per company), `leavebalances` (one per employee, type and leave year; also the lock), `leaveledgerentries` (append-only), `leaveyearruns` (years opened per company). Migration `2026-10-10-default-leave-types`.
 
   Companies also store `weekStart` (default `SUN`) and the terms version, acceptance time and who accepted.
 
@@ -408,7 +442,8 @@ Which calendar day an instant falls on depends on the company timezone: use `pla
   - history (BE-04): one entry per committed change, none after a rollback, the reason rule, append-only, and reading by role;
   - settings, holidays, calendar and uploads (BE-05): the card's calendar examples, the next-day timezone rule, Admin-only changes, size and type limits, and cross-company file access;
   - departments and employees (BE-06): every acceptance criterion (duplicate email, a 50 + 2 row CSV, manager loops, offboarding with reports, login blocked after the last day, the list per role, read-only manager view, the self-service phone);
-  - attendance (BE-07): every acceptance criterion, with a clock the tests move to exact local times (09:07 vs 09:12, midnight in Dubai vs Bogotá, parallel check-ins).
+  - attendance (BE-07): every acceptance criterion, with a clock the tests move to exact local times (09:07 vs 09:12, midnight in Dubai vs Bogotá, parallel check-ins);
+  - leave (BE-08): every acceptance criterion, including six parallel requests against one balance (fails without the lock).
 
 ## CI
 

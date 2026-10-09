@@ -7,6 +7,7 @@ import { apiErrors } from "../../platform/http/errors.ts"
 import type { Logger } from "../../platform/logging/logger.ts"
 import type { Clock } from "../../platform/time/clock.ts"
 import { recordHistory } from "../history/history.service.ts"
+import { seedDefaultLeaveTypes } from "../leave/leave-types.service.ts"
 import {
   createCompany,
   createEmployee,
@@ -131,6 +132,8 @@ export async function signup(
       ])
       // One account per person: the Admin is also an employee (same id).
       await createEmployee({ id: userId, companyId, name: input.name })
+      // Annual, Sick, Emergency and Unpaid, all editable (BE-08).
+      await seedDefaultLeaveTypes(companyId)
       return startSession({ userId, companyId }, sessionDeps(deps))
     })
   } catch (error) {
