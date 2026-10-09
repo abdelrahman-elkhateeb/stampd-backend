@@ -1,4 +1,5 @@
 import { attendanceModule } from "./attendance/index.ts"
+import { historyModule } from "./history/index.ts"
 import { identityModule } from "./identity/index.ts"
 import { leaveModule } from "./leave/index.ts"
 import type { AppModule } from "./module.ts"
@@ -18,4 +19,5 @@ export const MODULES: readonly AppModule[] = [
   requestsModule,
   reportingModule,
   notificationsModule,
+  historyModule,
 ]

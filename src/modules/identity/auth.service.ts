@@ -6,6 +6,7 @@ import { withoutTenantScope } from "../../platform/db/tenant.ts"
 import { apiErrors } from "../../platform/http/errors.ts"
 import type { Logger } from "../../platform/logging/logger.ts"
 import type { Clock } from "../../platform/time/clock.ts"
+import { recordHistory } from "../history/history.service.ts"
 import {
   createCompany,
   createEmployee,
@@ -364,6 +365,18 @@ export async function acceptInvitation(
     user.status = "ACTIVE"
     user.passwordChangedAt = deps.clock.now()
     await user.save()
+    await recordHistory(
+      {
+        companyId: user.companyId,
+        action: "employee.statusChanged",
+        entityId: user._id,
+        subjectEmployeeId: user._id,
+        actor: { type: "USER", userId: user._id },
+        before: { status: "INVITED" },
+        after: { status: "ACTIVE" },
+      },
+      deps
+    )
     await renameEmployee({
       id: user._id,
       companyId: user.companyId,

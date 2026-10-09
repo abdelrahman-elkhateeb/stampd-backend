@@ -7,9 +7,26 @@ mongoose.set("strictQuery", "throw")
 // session automatically, so services don't pass { session } around.
 mongoose.set("transactionAsyncLocalStorage", true)
 
-/** Runs fn in a MongoDB transaction (needs a replica set: compose, Atlas, tests). */
+/**
+ * Runs fn in a MongoDB transaction (needs a replica set: compose, Atlas,
+ * tests). Inside another withTransaction it joins the outer transaction, so
+ * services can use it without knowing whether their caller already did.
+ */
 export function withTransaction<T>(fn: () => Promise<T>): Promise<T> {
+  if (inTransaction()) return fn()
   return mongoose.connection.transaction(fn)
+}
+
+/** true inside withTransaction(): queries here commit or roll back together. */
+export function inTransaction(): boolean {
+  const store = (
+    mongoose as unknown as {
+      transactionAsyncLocalStorage?: {
+        getStore(): { session?: { inTransaction(): boolean } } | undefined
+      }
+    }
+  ).transactionAsyncLocalStorage?.getStore()
+  return store?.session?.inTransaction() ?? false
 }
 
 /**

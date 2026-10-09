@@ -2,7 +2,7 @@
 
 API for **Stampd**, the Employee Ops Platform (attendance, leave, requests and approvals for GCC teams).
 
-**Status:** BE-01 (foundation), BE-02 (authentication, company signup, tenant isolation) and BE-03 (roles, data scopes, permission checks) are in place. Endpoints: health, signup, login, sessions, invitations, password reset, current user and change password (table below). BE-03 adds no endpoints; it adds the checks every later endpoint uses. The other business endpoints arrive with BE-05 … BE-15.
+**Status:** BE-01 (foundation), BE-02 (authentication, company signup, tenant isolation) BE-03 (roles, data scopes, permission checks) and BE-04 (change history) are in place. Endpoints: health, signup, login, sessions, invitations, password reset, current user, change password and a record's history (table below). BE-03 adds no endpoints; it adds the checks every later endpoint uses. The other business endpoints arrive with BE-05 … BE-15.
 
 **Stack:** TypeScript · Express 5 · MongoDB · Mongoose · Zod. Those three (express, mongoose, zod) are the only runtime dependencies. Node 24, pnpm.
 
@@ -50,8 +50,9 @@ curl -s -X POST http://localhost:4000/auth/login -H 'content-type: application/j
 | POST   | `/auth/password/reset`        | none   | `200` tokens; ends every other session                                                                                         | BE-02  |
 | GET    | `/me`                         | bearer | `200` current user, employee and company basics                                                                                | BE-02  |
 | POST   | `/me/password`                | bearer | `204`; ends the user's other sessions                                                                                          | BE-02  |
+| GET    | `/history/{recordType}/{id}`  | bearer | `200 { items, meta }`: the record's changes, newest first; `404` when the caller can't read the record                         | BE-04  |
 
-Each ticket adds its endpoints to this table. The exact request and response bodies and error codes of every endpoint are on its Trello ticket (BE-02 for the identity endpoints).
+Each ticket adds its endpoints to this table. The exact request and response bodies and error codes of every endpoint are on its Trello ticket (BE-02 for the identity endpoints, BE-04 for history).
 
 ## Scripts
 
@@ -103,6 +104,7 @@ src/
                             current user; requireAuth for every module
                             access.ts: permission matrix and checks;     (BE-03)
                             availability.ts: colleague privacy
+    history/                append-only change history; GET /history/…   (BE-04)
     organization/           company (tenant) model; settings, employees   (BE-05, BE-06)
     attendance/ leave/ requests/ reporting/ notifications/                (BE-07 … BE-15)
   types/express.d.ts        req.id, req.log and req.auth
@@ -211,6 +213,37 @@ router.patch("/company/settings", auth, requirePermission("companySettings", "ed
 
 Every protected endpoint gets per-role tests like `tests/integration/access.test.ts`.
 
+**History (BE-04).** Every change to a tracked record is stored once, with who changed it, when (UTC), why, and the old and new values of only the fields that changed. Call `recordHistory()` from `src/modules/history/history.service.ts` **inside the same `withTransaction()` as the change**, so both commit or roll back together; outside a transaction it throws.
+
+```ts
+await withTransaction(async () => {
+  assertReason("attendance.corrected", body.reason) // 422 before changing anything
+  const before = await AttendanceDayModel.findOneAndUpdate(
+    { _id, companyId },
+    { $set: change }
+  ).lean()
+  await recordHistory(
+    {
+      companyId,
+      action: "attendance.corrected",
+      entityId: _id,
+      subjectEmployeeId: before.employeeId,
+      actor: { type: "USER", userId: auth.userId }, // or { type: "SYSTEM", job: "attendance.nightlyClose" }
+      before: pick(before, FIELDS),
+      after: { ...pick(before, FIELDS), ...change },
+      reason: body.reason,
+    },
+    deps
+  )
+})
+```
+
+- **Actions** (`HISTORY_ACTIONS`): each says which record type it changes and whether a reason is **required**. A missing required reason gives `422`, field `reason`, code `REQUIRED`, and the change rolls back. Required today: `attendance.corrected` and `leaveBalance.adjusted`. The ticket that builds a change may add actions or adjust the rule.
+- **Source:** `USER`, `APPROVAL` (pass `source: "APPROVAL"` on the actor) or `SYSTEM_JOB` (actor "system").
+- **Append-only:** every update, replace and delete on the history model throws (`HistoryImmutableError`), and there is no endpoint that writes history.
+- **Already recorded:** manager and department changes (`setReportingLine`, which now needs `changedBy`) and an invited employee becoming active.
+- **Reading:** `GET /history/{attendance-days|leave-balances|requests|employees|company-settings}/{id}`. You can read a record's history only if you can read the record (BE-03). For attendance days, leave balances and requests, the owner is taken from the entries, so a record with no history is `404`. Company settings use the company id.
+
 **Sessions.**
 
 - **Access token:** a JWT (HS256), valid 15 minutes, sent as `Authorization: Bearer …`. Each request re-checks the session and the user's status and role in the database, so logout, deactivation and role changes apply at once.
@@ -267,6 +300,7 @@ Which calendar day an instant falls on depends on the company timezone: use `pla
   - `sessions` and `refreshtokens`: token families, with expired tokens deleted by a TTL index;
   - `onetimetokens`: invite and reset links, kept 30 days after expiry so old links answer "expired";
   - `attempts`: rate-limit counters (TTL).
+  - `historyentries` (BE-04): append-only change history, one per change, indexed by company, record type, record id and time.
 
   Companies also store `weekStart` (default `SUN`) and the terms version, acceptance time and who accepted.
 
@@ -284,7 +318,8 @@ Which calendar day an instant falls on depends on the company timezone: use `pla
   - `/health` going DOWN and recovering;
   - every BE-02 flow over HTTP, with a clock the tests move (token expiry, the 20 s grace window, 30-day refresh expiry, the 15-minute lockout, 7-day invites, 1-hour reset links);
   - the cross-tenant suite;
-  - per-role authorization (BE-03): self / team / company, reassignment and role changes on the next request, 403 vs 404, self-approval.
+  - per-role authorization (BE-03): self / team / company, reassignment and role changes on the next request, 403 vs 404, self-approval;
+  - history (BE-04): one entry per committed change, none after a rollback, the reason rule, append-only, and reading by role.
 
 ## CI
 

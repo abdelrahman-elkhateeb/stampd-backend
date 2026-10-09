@@ -1,3 +1,6 @@
+import { withTransaction } from "../../platform/db/connection.ts"
+import type { Clock } from "../../platform/time/clock.ts"
+import { recordHistory, type HistoryActor } from "../history/history.service.ts"
 import { CompanyModel, type Weekday } from "./company.model.ts"
 import { EmployeeModel } from "./employee.model.ts"
 
@@ -123,30 +126,71 @@ export async function listDepartmentMemberIds(input: {
 
 /**
  * Changes an employee's manager and/or department (a field left out stays as
- * it is; null clears it). Access follows at once: the old manager loses the
- * employee on their next request. The manager must be another employee of
- * the same company. BE-06 adds the HTTP endpoint and loop prevention.
+ * it is; null clears it), and records it in the employee's history
+ * (employee.reportingLineChanged) in the same transaction. Access follows at
+ * once: the old manager loses the employee on their next request. The manager
+ * must be another employee of the same company. BE-06 adds the HTTP endpoint
+ * and loop prevention.
  */
-export async function setReportingLine(input: {
-  id: string
-  companyId: string
-  managerId?: string | null
-  departmentId?: string | null
-}): Promise<"UPDATED" | "NOT_FOUND" | "INVALID_MANAGER"> {
+export async function setReportingLine(
+  input: {
+    id: string
+    companyId: string
+    managerId?: string | null
+    departmentId?: string | null
+    changedBy: HistoryActor
+    reason?: string | null
+  },
+  deps: { clock: Clock }
+): Promise<"UPDATED" | "NOT_FOUND" | "INVALID_MANAGER"> {
   const { id, companyId, managerId, departmentId } = input
   if (managerId != null) {
     if (managerId === id) return "INVALID_MANAGER"
     const manager = await EmployeeModel.exists({ _id: managerId, companyId })
     if (!manager) return "INVALID_MANAGER"
   }
-  const result = await EmployeeModel.updateOne(
-    { _id: id, companyId },
-    {
-      $set: {
-        ...(managerId === undefined ? {} : { managerId }),
-        ...(departmentId === undefined ? {} : { departmentId }),
+  const change = {
+    ...(managerId === undefined ? {} : { managerId }),
+    ...(departmentId === undefined ? {} : { departmentId }),
+  }
+  return withTransaction(async () => {
+    const before = await EmployeeModel.findOneAndUpdate(
+      { _id: id, companyId },
+      { $set: change }
+    ).lean()
+    if (!before) return "NOT_FOUND"
+    await recordHistory(
+      {
+        companyId,
+        action: "employee.reportingLineChanged",
+        entityId: id,
+        subjectEmployeeId: id,
+        actor: input.changedBy,
+        before: {
+          managerId: before.managerId ?? null,
+          departmentId: before.departmentId ?? null,
+        },
+        after: {
+          managerId: before.managerId ?? null,
+          departmentId: before.departmentId ?? null,
+          ...change,
+        },
+        reason: input.reason,
       },
-    }
-  )
-  return result.matchedCount === 0 ? "NOT_FOUND" : "UPDATED"
+      deps
+    )
+    return "UPDATED"
+  })
+}
+
+/** Names of employees by id (for showing who did something); unknown ids are left out. */
+export async function getEmployeeNames(input: {
+  ids: string[]
+  companyId: string
+}): Promise<Map<string, string>> {
+  const employees = await EmployeeModel.find(
+    { companyId: input.companyId, _id: { $in: input.ids } },
+    { name: 1 }
+  ).lean()
+  return new Map(employees.map((employee) => [employee._id, employee.name]))
 }

@@ -100,6 +100,15 @@ const probe: AppModule = {
 
 const api = useApi({ modules: [...MODULES, probe] })
 
+/** setReportingLine as a test fixture (recorded in history as a system change). */
+const setLine = (
+  input: Omit<Parameters<typeof setReportingLine>[0], "changedBy">
+) =>
+  setReportingLine(
+    { ...input, changedBy: { type: "SYSTEM", job: "test" } },
+    { clock: api.clock }
+  )
+
 type Member = { id: string; token: string }
 
 let emails = 0
@@ -140,7 +149,7 @@ async function newCompany(name: string) {
       companyId,
       name: `${role} ${emails}`,
     })
-    await setReportingLine({ id: user!._id, companyId, ...reportingLine })
+    await setLine({ id: user!._id, companyId, ...reportingLine })
     const login = await api.post<Tokens>("/auth/login", {
       email,
       password: "blue-river-lantern",
@@ -262,7 +271,7 @@ describe("Manager", () => {
     expect((await api.get(path, org.manager.token)).status).toBe(200)
     expect((await api.get(path, org.otherManager.token)).status).toBe(404)
 
-    await setReportingLine({
+    await setLine({
       id: org.report.id,
       companyId: org.companyId,
       managerId: org.otherManager.id,
@@ -416,21 +425,21 @@ describe("role changes and reporting lines", () => {
     const org = await orgChart("Uniform")
     const other = await orgChart("Victor")
     expect(
-      await setReportingLine({
+      await setLine({
         id: org.report.id,
         companyId: org.companyId,
         managerId: other.manager.id,
       })
     ).toBe("INVALID_MANAGER")
     expect(
-      await setReportingLine({
+      await setLine({
         id: org.report.id,
         companyId: org.companyId,
         managerId: org.report.id,
       })
     ).toBe("INVALID_MANAGER")
     expect(
-      await setReportingLine({
+      await setLine({
         id: other.report.id,
         companyId: org.companyId,
         departmentId: "sales",
@@ -442,7 +451,7 @@ describe("role changes and reporting lines", () => {
 describe("availability viewer (who sees colleagues' details)", () => {
   it("knows the viewer's department and whose entries they see in full", async () => {
     const org = await orgChart("Whiskey")
-    await setReportingLine({
+    await setLine({
       id: org.manager.id,
       companyId: org.companyId,
       departmentId: "11111111-1111-4111-8111-111111111111",

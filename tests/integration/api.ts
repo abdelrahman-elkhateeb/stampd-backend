@@ -78,6 +78,8 @@ export function useApi(
       logger: logs.logger,
       clock,
     }),
+    /** Any method, e.g. request("DELETE", path, { token }) */
+    request: call,
     get: <T = Record<string, unknown>>(path: string, token?: string) =>
       call<T>("GET", path, { token }),
     post: <T = Record<string, unknown>>(
