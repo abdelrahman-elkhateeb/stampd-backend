@@ -22,6 +22,8 @@ const employeeSchema = new Schema(
     managerId: { type: String, default: null },
     /** Colleagues in the same department see each other's "Out" / "WFH". */
     departmentId: { type: String, default: null },
+    /** Profile photo (StoredFile id, BE-05 uploads), or null */
+    photoFileId: { type: String, default: null },
   },
   baseSchemaOptions
 )

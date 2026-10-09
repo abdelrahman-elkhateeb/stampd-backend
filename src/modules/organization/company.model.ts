@@ -1,6 +1,10 @@
 import { model, Schema, type InferSchemaType } from "mongoose"
 
-import { baseSchemaOptions, uuidId } from "../../platform/db/schema.ts"
+import {
+  baseSchemaOptions,
+  plainDateField,
+  uuidId,
+} from "../../platform/db/schema.ts"
 import { isTimeZone } from "../../platform/time/time.ts"
 
 /** Weekday codes, the same values the frontend uses (company.weekStart / workingDays). */
@@ -27,14 +31,31 @@ export const DEFAULT_WORKING_DAYS: readonly Weekday[] = [
   "THU",
 ]
 
+/** "HH:mm", 24-hour, a time of day in the company timezone. */
+export const LOCAL_TIME = /^([01]\d|2[0-3]):[0-5]\d$/
+
+/** Defaults for a new company (Trello BE-05; working days per the 2026-10-09 decision). */
+export const DEFAULT_SETTINGS = {
+  workStartTime: "09:00",
+  workEndTime: "17:00",
+  lateGraceMinutes: 0,
+  /** 1 = January */
+  leaveYearStartMonth: 1,
+} as const
+
 /**
  * The tenant. Every tenant-owned collection added by later tickets stores the
  * company's id, and BE-02 scopes every query by it.
  *
  * Kept so far: the tenant, its timezone (which decides what "today" means for
  * attendance and leave), its week start and working days (default Sun–Thu),
- * and the signup's terms acceptance. The other settings (work hours, grace,
- * leave year, logo) arrive with BE-05.
+ * the signup's terms acceptance, and the BE-05 settings: work hours, late
+ * grace, leave year start and logo.
+ *
+ * A timezone change applies from the next day (BE-05 AC): `timezone` is the
+ * newest value, and `timezoneHistory` keeps each earlier timezone with the
+ * last day it applied to. Read the timezone for a day or an instant through
+ * timezoneOn() / timezoneAt() in calendar.ts, never `timezone` directly.
  */
 const companySchema = new Schema(
   {
@@ -45,6 +66,19 @@ const companySchema = new Schema(
       type: String,
       required: true,
       validate: { validator: isTimeZone, message: "must be an IANA timezone" },
+    },
+    timezoneHistory: {
+      type: [
+        new Schema(
+          {
+            timezone: { type: String, required: true },
+            /** Last company-calendar day this timezone applied to */
+            until: plainDateField({ required: true }),
+          },
+          { _id: false }
+        ),
+      ],
+      default: () => [],
     },
     /** Terms of service + privacy policy accepted at signup (BE-02). */
     termsVersion: { type: String },
@@ -61,6 +95,30 @@ const companySchema = new Schema(
         message: "must list at least one weekday, each once",
       },
     },
+    workStartTime: {
+      type: String,
+      default: DEFAULT_SETTINGS.workStartTime,
+      match: LOCAL_TIME,
+    },
+    workEndTime: {
+      type: String,
+      default: DEFAULT_SETTINGS.workEndTime,
+      match: LOCAL_TIME,
+    },
+    lateGraceMinutes: {
+      type: Number,
+      default: DEFAULT_SETTINGS.lateGraceMinutes,
+      min: 0,
+      max: 240,
+    },
+    leaveYearStartMonth: {
+      type: Number,
+      default: DEFAULT_SETTINGS.leaveYearStartMonth,
+      min: 1,
+      max: 12,
+    },
+    /** The logo image (StoredFile id), or null */
+    logoFileId: { type: String, default: null },
   },
   baseSchemaOptions
 )

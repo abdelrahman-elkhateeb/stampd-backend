@@ -29,11 +29,16 @@ export const HISTORY_ACTIONS = {
     reason: "optional",
   },
   "employee.statusChanged": { entityType: "EMPLOYEE", reason: "optional" },
+  "employee.photoChanged": { entityType: "EMPLOYEE", reason: "optional" },
   // Company settings (BE-05)
   "companySettings.changed": {
     entityType: "COMPANY_SETTINGS",
     reason: "optional",
   },
+  // Holidays (BE-05): recorded on the company settings' history
+  "holiday.added": { entityType: "COMPANY_SETTINGS", reason: "optional" },
+  "holiday.changed": { entityType: "COMPANY_SETTINGS", reason: "optional" },
+  "holiday.removed": { entityType: "COMPANY_SETTINGS", reason: "optional" },
 } as const satisfies Record<
   string,
   { entityType: EntityType; reason: "optional" | "required" }

@@ -58,6 +58,8 @@ export const PERMISSIONS = {
     edit: ADMIN_ONLY,
     delete: ADMIN_ONLY,
   },
+  /** Profile photo (BE-05 uploads): your own, or the Admin for anyone */
+  employeePhoto: { edit: { ...SELF, ADMIN: ["company"] } },
   /** Clock in/out and timesheets (BE-07, BE-08); corrections by Admin/HR */
   attendance: { view: PERSONAL, create: SELF, edit: ADMIN_ONLY },
   /** Leave balances (BE-08) and leave requests (BE-10); edit = cancel your own */

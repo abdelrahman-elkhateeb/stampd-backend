@@ -2,7 +2,7 @@
 
 API for **Stampd**, the Employee Ops Platform (attendance, leave, requests and approvals for GCC teams).
 
-**Status:** BE-01 (foundation), BE-02 (authentication, company signup, tenant isolation) BE-03 (roles, data scopes, permission checks) and BE-04 (change history) are in place. Endpoints: health, signup, login, sessions, invitations, password reset, current user, change password and a record's history (table below). BE-03 adds no endpoints; it adds the checks every later endpoint uses. The other business endpoints arrive with BE-05 … BE-15.
+**Status:** BE-01 (foundation), BE-02 (authentication, company signup, tenant isolation) BE-03 (roles, data scopes, permission checks), BE-04 (change history) and BE-05 (company settings, work calendar, holidays, image uploads) are in place. Endpoints: health, signup, login, sessions, invitations, password reset, current user, change password, a record's history, settings, calendar, holidays, logo and photo uploads (table below). BE-03 adds no endpoints; it adds the checks every later endpoint uses. The other business endpoints arrive with BE-06 … BE-15.
 
 **Stack:** TypeScript · Express 5 · MongoDB · Mongoose · Zod. Those three (express, mongoose, zod) are the only runtime dependencies. Node 24, pnpm.
 
@@ -36,23 +36,31 @@ curl -s -X POST http://localhost:4000/auth/login -H 'content-type: application/j
 
 ## Endpoints
 
-| Method | Path                          | Auth   | Response                                                                                                                       | Ticket |
-| ------ | ----------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------ | ------ |
-| GET    | `/health`                     | none   | `200 {"status":"OK","database":"UP"}`, or `503 {"status":"DEGRADED","database":"DOWN"}` when MongoDB doesn't answer within 2 s | BE-01  |
-| POST   | `/auth/signup`                | none   | `201` tokens: new company + Admin account (also an employee)                                                                   | BE-02  |
-| POST   | `/auth/login`                 | none   | `200` tokens                                                                                                                   | BE-02  |
-| POST   | `/auth/refresh`               | none   | `200` new token pair (rotation, 20 s grace window)                                                                             | BE-02  |
-| POST   | `/auth/logout`                | none   | `204`, ends the session                                                                                                        | BE-02  |
-| POST   | `/auth/invitations/verify`    | none   | `200 { companyName, name, email, expiresAt }`                                                                                  | BE-02  |
-| POST   | `/auth/invitations/accept`    | none   | `200` tokens                                                                                                                   | BE-02  |
-| POST   | `/auth/password/forgot`       | none   | `202` always                                                                                                                   | BE-02  |
-| POST   | `/auth/password/reset/verify` | none   | `204` when the link is usable                                                                                                  | BE-02  |
-| POST   | `/auth/password/reset`        | none   | `200` tokens; ends every other session                                                                                         | BE-02  |
-| GET    | `/me`                         | bearer | `200` current user, employee and company basics                                                                                | BE-02  |
-| POST   | `/me/password`                | bearer | `204`; ends the user's other sessions                                                                                          | BE-02  |
-| GET    | `/history/{recordType}/{id}`  | bearer | `200 { items, meta }`: the record's changes, newest first; `404` when the caller can't read the record                         | BE-04  |
+| Method                | Path                            | Auth                 | Response                                                                                                                       | Ticket |
+| --------------------- | ------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------ |
+| GET                   | `/health`                       | none                 | `200 {"status":"OK","database":"UP"}`, or `503 {"status":"DEGRADED","database":"DOWN"}` when MongoDB doesn't answer within 2 s | BE-01  |
+| POST                  | `/auth/signup`                  | none                 | `201` tokens: new company + Admin account (also an employee)                                                                   | BE-02  |
+| POST                  | `/auth/login`                   | none                 | `200` tokens                                                                                                                   | BE-02  |
+| POST                  | `/auth/refresh`                 | none                 | `200` new token pair (rotation, 20 s grace window)                                                                             | BE-02  |
+| POST                  | `/auth/logout`                  | none                 | `204`, ends the session                                                                                                        | BE-02  |
+| POST                  | `/auth/invitations/verify`      | none                 | `200 { companyName, name, email, expiresAt }`                                                                                  | BE-02  |
+| POST                  | `/auth/invitations/accept`      | none                 | `200` tokens                                                                                                                   | BE-02  |
+| POST                  | `/auth/password/forgot`         | none                 | `202` always                                                                                                                   | BE-02  |
+| POST                  | `/auth/password/reset/verify`   | none                 | `204` when the link is usable                                                                                                  | BE-02  |
+| POST                  | `/auth/password/reset`          | none                 | `200` tokens; ends every other session                                                                                         | BE-02  |
+| GET                   | `/me`                           | bearer               | `200` current user, employee and company basics                                                                                | BE-02  |
+| POST                  | `/me/password`                  | bearer               | `204`; ends the user's other sessions                                                                                          | BE-02  |
+| GET                   | `/history/{recordType}/{id}`    | bearer               | `200 { items, meta }`: the record's changes, newest first; `404` when the caller can't read the record                         | BE-04  |
+| GET                   | `/company/settings`             | bearer               | `200` settings (every role)                                                                                                    | BE-05  |
+| PATCH                 | `/company/settings`             | bearer, Admin        | `200` settings; timezone changes apply from the next day                                                                       | BE-05  |
+| PUT / DELETE          | `/company/logo`                 | bearer, Admin        | raw PNG/JPEG/WebP body ≤ 2 MB → `200 { logoUrl }` / `204`                                                                      | BE-05  |
+| PUT / DELETE          | `/employees/{id}/photo`         | bearer, own or Admin | raw image body → `200 { photoUrl }` / `204`                                                                                    | BE-05  |
+| GET                   | `/files/{id}?expires&signature` | signed URL           | the image (URLs come from the endpoints above)                                                                                 | BE-05  |
+| GET                   | `/company/holidays?year=`       | bearer               | `200 { year, items }` (every role)                                                                                             | BE-05  |
+| POST / PATCH / DELETE | `/company/holidays[/{id}]`      | bearer, Admin        | `201`/`200 { holiday, affectedRequests }` / `204`                                                                              | BE-05  |
+| GET                   | `/company/calendar?from&to`     | bearer               | `200 { workingDayCount, days }` (every role)                                                                                   | BE-05  |
 
-Each ticket adds its endpoints to this table. The exact request and response bodies and error codes of every endpoint are on its Trello ticket (BE-02 for the identity endpoints, BE-04 for history).
+Each ticket adds its endpoints to this table. The exact request and response bodies and error codes of every endpoint are on its Trello ticket (BE-02 for the identity endpoints, BE-04 for history, BE-05 for settings, holidays, calendar and uploads).
 
 ## Scripts
 
@@ -105,8 +113,10 @@ src/
                             access.ts: permission matrix and checks;     (BE-03)
                             availability.ts: colleague privacy
     history/                append-only change history; GET /history/…   (BE-04)
-    organization/           company (tenant) model; settings, employees   (BE-05, BE-06)
+    organization/           company settings, holidays, work calendar,    (BE-05)
+                            logo and photos; departments, employees       (BE-06)
     attendance/ leave/ requests/ reporting/ notifications/                (BE-07 … BE-15)
+  platform/storage/files.ts image uploads: type check, storage, signed URLs (BE-05)
   types/express.d.ts        req.id, req.log and req.auth
 tests/unit, tests/integration
 ```
@@ -169,20 +179,21 @@ Tenant-owned models declare `companyId: tenantIdField()` and use `schema.plugin(
 - **team:** the caller's **active direct reports**, i.e. employees whose `managerId` is the caller. It is read from the database on every check, so a reassignment or role change applies on the next request. No skip-level; a deactivated employee drops out of the team (the Admin keeps access);
 - **company:** every employee of the caller's company.
 
-| Resource (ticket)                          | Action                     | Employee | Manager     | Admin/HR |
-| ------------------------------------------ | -------------------------- | -------- | ----------- | -------- |
-| `employee` profile (BE-06)                 | view                       | self     | self + team | company  |
-|                                            | create / edit / delete     | —        | —           | company  |
-| `attendance` (BE-07, BE-08)                | view                       | self     | self + team | company  |
-|                                            | create (clock in/out)      | self     | self        | self     |
-|                                            | edit (corrections)         | —        | —           | company  |
-| `leave` (BE-08, BE-10), `requests` (BE-09) | view                       | self     | self + team | company  |
-|                                            | create / edit (cancel own) | self     | self        | self     |
-|                                            | approve                    | —        | team        | company  |
-| `reports` (BE-13)                          | view                       | self     | self + team | company  |
-| `companySettings` (BE-05)                  | view                       | company  | company     | company  |
-|                                            | edit                       | —        | —           | company  |
-| `users`: invite, role, deactivate (BE-06)  | all                        | —        | —           | company  |
+| Resource (ticket)                              | Action                     | Employee | Manager     | Admin/HR |
+| ---------------------------------------------- | -------------------------- | -------- | ----------- | -------- |
+| `employee` profile (BE-06)                     | view                       | self     | self + team | company  |
+|                                                | create / edit / delete     | —        | —           | company  |
+| `attendance` (BE-07, BE-08)                    | view                       | self     | self + team | company  |
+|                                                | create (clock in/out)      | self     | self        | self     |
+|                                                | edit (corrections)         | —        | —           | company  |
+| `leave` (BE-08, BE-10), `requests` (BE-09)     | view                       | self     | self + team | company  |
+|                                                | create / edit (cancel own) | self     | self        | self     |
+|                                                | approve                    | —        | team        | company  |
+| `reports` (BE-13)                              | view                       | self     | self + team | company  |
+| `companySettings` incl. holidays, logo (BE-05) | view                       | company  | company     | company  |
+|                                                | edit                       | —        | —           | company  |
+| `employeePhoto` (BE-05)                        | edit                       | self     | self        | company  |
+| `users`: invite, role, deactivate (BE-06)      | all                        | —        | —           | company  |
 
 **Answers:**
 
@@ -212,6 +223,19 @@ router.patch("/company/settings", auth, requirePermission("companySettings", "ed
 - **nothing:** everything else, i.e. other departments and colleagues' business trips and permissions.
 
 Every protected endpoint gets per-role tests like `tests/integration/access.test.ts`.
+
+**Settings, calendar and uploads (BE-05).**
+
+- **Work calendar** (`src/modules/organization/calendar.ts`): use it for any "working day" question.
+  - `loadWorkCalendar({ companyId, from, to })` loads the calendar, then `isWorkingDay(calendar, date)` and `workingDaysBetween(calendar, from, to, { halfDayStart, halfDayEnd })` answer from it. Both ends of the range count.
+  - A working day is a company working weekday that no holiday covers.
+- **Holidays** are one record from `startDate` to `endDate`. Adding or changing one returns `affectedRequests`: approved requests on those dates, which are never changed automatically. The leave and request modules (BE-09, BE-10) fill that list by calling `registerAffectedRequestFinder()`.
+- **Timezone:** a change applies from the company's next day. `timezone` is the newest value, and `timezoneHistory` keeps each earlier one with its last day. Ask `timezoneOn(company, day)`, `timezoneAt(company, instant)` or `companyToday(company, instant)`; never read `company.timezone` directly for a past or current day.
+- **Uploads** (`src/platform/storage/files.ts`):
+  - The image is sent as the raw request body, not multipart.
+  - Its type comes from the file's bytes, not its header: PNG, JPEG and WebP only, no SVG. The limit is 2 MB. Errors are `422` on field `file`: `REQUIRED`, `FILE_TOO_LARGE` or `UNSUPPORTED_FILE_TYPE`.
+  - Images are stored in MongoDB (`storedfiles`, scoped by company). Only that file touches the bytes, so object storage can replace it later.
+  - Responses carry **signed URLs** (`/files/{id}?expires=…&signature=…`, valid at least 24 h) that work in `<img src>` without a token. Anything else gives `404`.
 
 **History (BE-04).** Every change to a tracked record is stored once, with who changed it, when (UTC), why, and the old and new values of only the fields that changed. Call `recordHistory()` from `src/modules/history/history.service.ts` **inside the same `withTransaction()` as the change**, so both commit or roll back together; outside a transaction it throws.
 
@@ -301,6 +325,7 @@ Which calendar day an instant falls on depends on the company timezone: use `pla
   - `onetimetokens`: invite and reset links, kept 30 days after expiry so old links answer "expired";
   - `attempts`: rate-limit counters (TTL).
   - `historyentries` (BE-04): append-only change history, one per change, indexed by company, record type, record id and time.
+  - BE-05: `holidays` (start/end dates), `storedfiles` (uploaded images); companies gain work hours, late grace, leave year start month, `logoFileId` and `timezoneHistory`; employees gain `photoFileId`. Existing companies read the defaults (09:00–17:00, grace 0, January).
 
   Companies also store `weekStart` (default `SUN`) and the terms version, acceptance time and who accepted.
 
@@ -319,7 +344,8 @@ Which calendar day an instant falls on depends on the company timezone: use `pla
   - every BE-02 flow over HTTP, with a clock the tests move (token expiry, the 20 s grace window, 30-day refresh expiry, the 15-minute lockout, 7-day invites, 1-hour reset links);
   - the cross-tenant suite;
   - per-role authorization (BE-03): self / team / company, reassignment and role changes on the next request, 403 vs 404, self-approval;
-  - history (BE-04): one entry per committed change, none after a rollback, the reason rule, append-only, and reading by role.
+  - history (BE-04): one entry per committed change, none after a rollback, the reason rule, append-only, and reading by role;
+  - settings, holidays, calendar and uploads (BE-05): the card's calendar examples, the next-day timezone rule, Admin-only changes, size and type limits, and cross-company file access.
 
 ## CI
 

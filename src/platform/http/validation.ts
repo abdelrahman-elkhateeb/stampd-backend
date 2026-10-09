@@ -142,6 +142,8 @@ export function route<S extends Schemas>(
       req,
       res,
     } as RouteInput<S>)
+    // A handler that streams its own response (e.g. a file) has already sent it.
+    if (res.headersSent) return
     res.status(result.status)
     if (result.body === undefined) res.end()
     else res.json(result.body)

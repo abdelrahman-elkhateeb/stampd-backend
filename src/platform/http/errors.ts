@@ -36,6 +36,9 @@ export const FIELD_ERROR_CODES = [
   "TOO_COMMON",
   "CONTAINS_PERSONAL_INFO",
   "INCORRECT",
+  // BE-05: image uploads
+  "FILE_TOO_LARGE",
+  "UNSUPPORTED_FILE_TYPE",
 ] as const
 
 export type FieldErrorCode = (typeof FIELD_ERROR_CODES)[number]

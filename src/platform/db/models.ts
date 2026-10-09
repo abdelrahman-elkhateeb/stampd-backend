@@ -3,6 +3,8 @@
  * migrations sync their indexes. A ticket that adds a model adds one line here.
  */
 export { CompanyModel } from "../../modules/organization/company.model.ts"
+export { HolidayModel } from "../../modules/organization/holiday.model.ts"
+export { StoredFileModel } from "../storage/files.ts"
 export { EmployeeModel } from "../../modules/organization/employee.model.ts"
 export { UserModel } from "../../modules/identity/user.model.ts"
 export {

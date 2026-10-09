@@ -48,18 +48,28 @@ export function useApi(
   async function call<T = Record<string, unknown>>(
     method: string,
     path: string,
-    options: { body?: unknown; token?: string } = {}
+    options: {
+      body?: unknown
+      token?: string
+      /** Raw bytes instead of JSON, e.g. an image upload */
+      raw?: { bytes: Uint8Array; contentType: string }
+    } = {}
   ): Promise<ApiResponse<T>> {
     const response = await fetch(`${state.url}${path}`, {
       method,
       headers: {
-        ...(options.body === undefined
-          ? {}
-          : { "content-type": "application/json" }),
+        ...(options.raw
+          ? { "content-type": options.raw.contentType }
+          : options.body === undefined
+            ? {}
+            : { "content-type": "application/json" }),
         ...(options.token ? { authorization: `Bearer ${options.token}` } : {}),
       },
-      body:
-        options.body === undefined ? undefined : JSON.stringify(options.body),
+      body: options.raw
+        ? options.raw.bytes
+        : options.body === undefined
+          ? undefined
+          : JSON.stringify(options.body),
     })
     const text = await response.text()
     return {
@@ -80,6 +90,13 @@ export function useApi(
     }),
     /** Any method, e.g. request("DELETE", path, { token }) */
     request: call,
+    /** The server's base URL, for raw fetch() calls (e.g. downloading a file) */
+    url: () => state.url,
+    patch: <T = Record<string, unknown>>(
+      path: string,
+      body?: unknown,
+      token?: string
+    ) => call<T>("PATCH", path, { body, token }),
     get: <T = Record<string, unknown>>(path: string, token?: string) =>
       call<T>("GET", path, { token }),
     post: <T = Record<string, unknown>>(
