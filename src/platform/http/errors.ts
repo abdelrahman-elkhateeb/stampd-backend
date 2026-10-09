@@ -22,6 +22,8 @@ export type ErrorCode =
   // BE-02: invite and password-reset links
   | "TOKEN_INVALID"
   | "TOKEN_EXPIRED"
+  // BE-03: nobody approves their own request
+  | "SELF_APPROVAL"
 
 export const FIELD_ERROR_CODES = [
   "REQUIRED",
@@ -112,6 +114,8 @@ export const apiErrors = {
   tokenExpired: () => new ApiError(410, "TOKEN_EXPIRED", "Token expired"),
   forbidden: (message = "Not allowed for this role") =>
     new ApiError(403, "FORBIDDEN", message),
+  selfApproval: () =>
+    new ApiError(403, "SELF_APPROVAL", "You can't approve your own request"),
   notFound: (message = "Not found") => new ApiError(404, "NOT_FOUND", message),
   conflict: (message = "Conflict") => new ApiError(409, "CONFLICT", message),
   internal: () => new ApiError(500, "INTERNAL_ERROR", "Internal error"),

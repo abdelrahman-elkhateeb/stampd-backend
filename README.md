@@ -2,7 +2,7 @@
 
 API for **Stampd**, the Employee Ops Platform (attendance, leave, requests and approvals for GCC teams).
 
-**Status:** BE-01 (foundation) and BE-02 (authentication, company signup, tenant isolation) are in place. Endpoints: health, signup, login, sessions, invitations, password reset, current user and change password (table below). The other business endpoints arrive with BE-03 … BE-15.
+**Status:** BE-01 (foundation), BE-02 (authentication, company signup, tenant isolation) and BE-03 (roles, data scopes, permission checks) are in place. Endpoints: health, signup, login, sessions, invitations, password reset, current user and change password (table below). BE-03 adds no endpoints; it adds the checks every later endpoint uses. The other business endpoints arrive with BE-05 … BE-15.
 
 **Stack:** TypeScript · Express 5 · MongoDB · Mongoose · Zod. Those three (express, mongoose, zod) are the only runtime dependencies. Node 24, pnpm.
 
@@ -100,7 +100,9 @@ src/
   modules/                  One folder per domain, each with its routes, models and services
     system/                 GET /health                                   (BE-01)
     identity/               signup, login, sessions, invitations, reset,  (BE-02)
-                            current user; requireAuth for every module; roles (BE-03)
+                            current user; requireAuth for every module
+                            access.ts: permission matrix and checks;     (BE-03)
+                            availability.ts: colleague privacy
     organization/           company (tenant) model; settings, employees   (BE-05, BE-06)
     attendance/ leave/ requests/ reporting/ notifications/                (BE-07 … BE-15)
   types/express.d.ts        req.id, req.log and req.auth
@@ -159,6 +161,56 @@ router.get(
 
 Tenant-owned models declare `companyId: tenantIdField()` and use `schema.plugin(tenantScoped)` (`src/platform/db/tenant.ts`): any query on them that doesn't filter by `companyId` **throws**. The only escape hatch is `withoutTenantScope(query)`, for lookups that happen before a tenant is known (login by email). Every new endpoint gets a cross-tenant test like `tests/integration/tenant-isolation.test.ts` (Trello BE-02: a release gate).
 
+**Permissions (BE-03).** Three roles (Employee, Manager, Admin/HR; one per user) and three scopes:
+
+- **self:** the caller's own records;
+- **team:** the caller's **active direct reports**, i.e. employees whose `managerId` is the caller. It is read from the database on every check, so a reassignment or role change applies on the next request. No skip-level; a deactivated employee drops out of the team (the Admin keeps access);
+- **company:** every employee of the caller's company.
+
+| Resource (ticket)                          | Action                     | Employee | Manager     | Admin/HR |
+| ------------------------------------------ | -------------------------- | -------- | ----------- | -------- |
+| `employee` profile (BE-06)                 | view                       | self     | self + team | company  |
+|                                            | create / edit / delete     | —        | —           | company  |
+| `attendance` (BE-07, BE-08)                | view                       | self     | self + team | company  |
+|                                            | create (clock in/out)      | self     | self        | self     |
+|                                            | edit (corrections)         | —        | —           | company  |
+| `leave` (BE-10, BE-11), `requests` (BE-09) | view                       | self     | self + team | company  |
+|                                            | create / edit (cancel own) | self     | self        | self     |
+|                                            | approve                    | —        | team        | company  |
+| `reports` (BE-13)                          | view                       | self     | self + team | company  |
+| `companySettings` (BE-05)                  | view                       | company  | company     | company  |
+|                                            | edit                       | —        | —           | company  |
+| `users`: invite, role, deactivate (BE-06)  | all                        | —        | —           | company  |
+
+**Answers:**
+
+- the role has no grant for the action → `403 FORBIDDEN`, before anything changes;
+- it has a grant, but the employee is outside its scope → `404 NOT_FOUND`, the same as an id that doesn't exist;
+- approving your own request, whatever the role → `403 SELF_APPROVAL`.
+
+The matrix is `PERMISSIONS` in `src/modules/identity/access.ts`. The ticket that builds a resource may adjust its row; update this table and the BE-03 Trello card with it. Use:
+
+```ts
+// one employee's data (403 / 404 / SELF_APPROVAL as above)
+await authorize(getAuth(req), "attendance", "view", params.employeeId)
+
+// lists: "ALL" (company) or the ids the caller may see
+const ids = await scopedEmployeeIds(getAuth(req), "leave", "view")
+const filter = ids === "ALL" ? { companyId } : { companyId, employeeId: { $in: ids } }
+
+// actions that aren't about one employee: a route guard
+router.patch("/company/settings", auth, requirePermission("companySettings", "edit"), …)
+```
+
+**Colleague privacy** (`src/modules/identity/availability.ts`). In "who is out" views, pass each entry through `presentAvailability(await availabilityViewer(auth), entry)`:
+
+- **full detail:** your own entries, a Manager's direct reports', and everyone's for the Admin;
+- **name + `OUT`:** a colleague in your department on leave, with no type, reason or dates;
+- **name + `WFH`:** a colleague in your department working from home;
+- **nothing:** everything else, i.e. other departments and colleagues' business trips and permissions.
+
+Every protected endpoint gets per-role tests like `tests/integration/access.test.ts`.
+
 **Sessions.**
 
 - **Access token:** a JWT (HS256), valid 15 minutes, sent as `Authorization: Bearer …`. Each request re-checks the session and the user's status and role in the database, so logout, deactivation and role changes apply at once.
@@ -207,11 +259,11 @@ Which calendar day an instant falls on depends on the company timezone: use `pla
 
   Never edit a migration that has run; add a new one.
 
-- **Seed:** `pnpm db:seed` upserts the demo company and the demo accounts (same ids, emails and password as the frontend's mock data) and issues a fresh invite for the invited account. Later tickets extend it.
+- **Seed:** `pnpm db:seed` upserts the demo company and the demo accounts (same ids, emails and password as the frontend's mock data) and issues a fresh invite for the invited account. The demo manager (`manager@`) is the direct manager of the employee, deactivated and invited accounts, and reports to the Admin. Later tickets extend it.
 - **What BE-01 creates:** the `companies` collection (the tenant root) with its timezone and working days. New companies default to **Sunday–Thursday** (`DEFAULT_WORKING_DAYS` in `company.model.ts`); the Admin changes it in settings (BE-05). Everything else arrives with its ticket.
 - **What BE-02 adds:**
   - `users`: login account (email unique platform-wide, scrypt hash, role, status, locale);
-  - `employees`: the HR record, which shares the user's id;
+  - `employees`: the HR record, which shares the user's id; BE-03 adds `managerId` and `departmentId` (the reporting line that decides team scope and colleague visibility);
   - `sessions` and `refreshtokens`: token families, with expired tokens deleted by a TTL index;
   - `onetimetokens`: invite and reset links, kept 30 days after expiry so old links answer "expired";
   - `attempts`: rate-limit counters (TTL).
@@ -231,7 +283,8 @@ Which calendar day an instant falls on depends on the company timezone: use `pla
   - a request that goes from validation through a handler to MongoDB;
   - `/health` going DOWN and recovering;
   - every BE-02 flow over HTTP, with a clock the tests move (token expiry, the 20 s grace window, 30-day refresh expiry, the 15-minute lockout, 7-day invites, 1-hour reset links);
-  - the cross-tenant suite.
+  - the cross-tenant suite;
+  - per-role authorization (BE-03): self / team / company, reassignment and role changes on the next request, 403 vs 404, self-approval.
 
 ## CI
 

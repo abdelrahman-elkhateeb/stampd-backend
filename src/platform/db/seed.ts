@@ -38,24 +38,31 @@ type DemoAccount = {
   role: Role
   status: UserStatus
   locale: Locale
+  /** Direct manager (BE-03 team scope): the demo manager leads the employees */
+  managerId: string | null
 }
+
+const ADMIN_ID = "0b6c2f0e-8d7a-4a51-9a0e-2a4f7b8c9d10"
+const MANAGER_ID = "5a0d7c4b-1e2f-4a3b-8c9d-0e1f2a3b4c5d"
 
 export const DEMO_ACCOUNTS: readonly DemoAccount[] = [
   {
-    id: "0b6c2f0e-8d7a-4a51-9a0e-2a4f7b8c9d10",
+    id: ADMIN_ID,
     name: "Sara Al-Harbi",
     email: "admin@demo.stampd.app",
     role: "ADMIN",
     status: "ACTIVE",
     locale: "en",
+    managerId: null,
   },
   {
-    id: "5a0d7c4b-1e2f-4a3b-8c9d-0e1f2a3b4c5d",
+    id: MANAGER_ID,
     name: "Omar Khalid",
     email: "manager@demo.stampd.app",
     role: "MANAGER",
     status: "ACTIVE",
     locale: "ar",
+    managerId: ADMIN_ID,
   },
   {
     id: "9c8b7a6d-5e4f-4321-9abc-def012345678",
@@ -64,6 +71,7 @@ export const DEMO_ACCOUNTS: readonly DemoAccount[] = [
     role: "EMPLOYEE",
     status: "ACTIVE",
     locale: "en",
+    managerId: MANAGER_ID,
   },
   {
     id: "1d2c3b4a-5f6e-4d7c-8b9a-0f1e2d3c4b5a",
@@ -72,6 +80,7 @@ export const DEMO_ACCOUNTS: readonly DemoAccount[] = [
     role: "EMPLOYEE",
     status: "DEACTIVATED",
     locale: "en",
+    managerId: MANAGER_ID,
   },
   {
     id: "3b9f2c1d-7a6e-4f5d-9c8b-1a2b3c4d5e6f",
@@ -80,6 +89,7 @@ export const DEMO_ACCOUNTS: readonly DemoAccount[] = [
     role: "EMPLOYEE",
     status: "INVITED",
     locale: "en",
+    managerId: MANAGER_ID,
   },
 ]
 
@@ -102,7 +112,7 @@ export async function seedDemoData(
   for (const account of DEMO_ACCOUNTS) {
     await EmployeeModel.updateOne(
       { _id: account.id, companyId },
-      { $set: { name: account.name } },
+      { $set: { name: account.name, managerId: account.managerId } },
       { upsert: true, runValidators: true }
     )
     await UserModel.updateOne(
