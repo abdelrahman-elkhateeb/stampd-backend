@@ -22,6 +22,7 @@ import {
   workingDaysBetween,
 } from "./calendar.ts"
 import { CompanyModel, LOCAL_TIME, WEEKDAYS } from "./company.model.ts"
+import { addEmployeeRoutes } from "./employees.routes.ts"
 import {
   addHoliday,
   changeHoliday,
@@ -70,8 +71,8 @@ const MAX_CALENDAR_DAYS = 366
 
 /**
  * Organization (BE-05): company settings, work calendar, holidays, logo and
- * employee photo uploads, and signed file downloads. BE-06 adds departments
- * and employees. The exact requests and responses are on the Trello BE-05
+ * employee photo uploads, and signed file downloads (BE-05); departments
+ * and employees (BE-06, employees.routes.ts). The exact requests and responses are on the Trello BE-05
  * card.
  */
 export const organizationModule: AppModule = {
@@ -307,6 +308,9 @@ export const organizationModule: AppModule = {
         return { status: 204 }
       })
     )
+
+    // ── departments and employees (BE-06) ──
+    addEmployeeRoutes(router, deps, auth)
 
     // ── work calendar ──
     router.get(

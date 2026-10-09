@@ -24,6 +24,10 @@ export type ErrorCode =
   | "TOKEN_EXPIRED"
   // BE-03: nobody approves their own request
   | "SELF_APPROVAL"
+  // BE-06: employee and department rules
+  | "DEPARTMENT_NOT_EMPTY"
+  | "HAS_DIRECT_REPORTS"
+  | "LAST_ADMIN"
 
 export const FIELD_ERROR_CODES = [
   "REQUIRED",
@@ -39,6 +43,11 @@ export const FIELD_ERROR_CODES = [
   // BE-05: image uploads
   "FILE_TOO_LARGE",
   "UNSUPPORTED_FILE_TYPE",
+  // BE-06: references to other records, and manager rules
+  "UNKNOWN_REFERENCE",
+  "SELF_MANAGER",
+  "NOT_A_MANAGER",
+  "MANAGER_LOOP",
 ] as const
 
 export type FieldErrorCode = (typeof FIELD_ERROR_CODES)[number]
@@ -119,6 +128,9 @@ export const apiErrors = {
     new ApiError(403, "FORBIDDEN", message),
   selfApproval: () =>
     new ApiError(403, "SELF_APPROVAL", "You can't approve your own request"),
+  /** 409 with a specific code (DEPARTMENT_NOT_EMPTY, HAS_DIRECT_REPORTS, LAST_ADMIN …) */
+  conflictWith: (code: ErrorCode, message: string) =>
+    new ApiError(409, code, message),
   notFound: (message = "Not found") => new ApiError(404, "NOT_FOUND", message),
   conflict: (message = "Conflict") => new ApiError(409, "CONFLICT", message),
   internal: () => new ApiError(500, "INTERNAL_ERROR", "Internal error"),

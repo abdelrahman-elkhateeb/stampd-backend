@@ -135,3 +135,15 @@ export function companyToday(
 ): PlainDate {
   return plainDateInZone(instant, timezoneAt(company, instant))
 }
+
+/** A company's "today" now, or undefined when the company doesn't exist. */
+export async function loadCompanyToday(
+  companyId: string,
+  now: Date
+): Promise<PlainDate | undefined> {
+  const company = await CompanyModel.findById(companyId, {
+    timezone: 1,
+    timezoneHistory: 1,
+  }).lean()
+  return company ? companyToday(company, now) : undefined
+}

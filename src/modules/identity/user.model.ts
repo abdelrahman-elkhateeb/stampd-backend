@@ -1,6 +1,10 @@
 import { model, Schema, type InferSchemaType } from "mongoose"
 
-import { baseSchemaOptions, uuidId } from "../../platform/db/schema.ts"
+import {
+  baseSchemaOptions,
+  plainDateField,
+  uuidId,
+} from "../../platform/db/schema.ts"
 import { tenantIdField, tenantScoped } from "../../platform/db/tenant.ts"
 
 export const ROLES = ["EMPLOYEE", "MANAGER", "ADMIN"] as const
@@ -35,6 +39,12 @@ const userSchema = new Schema(
     status: { type: String, enum: USER_STATUSES, required: true },
     locale: { type: String, enum: LOCALES, default: "en" },
     passwordChangedAt: { type: Date },
+    /**
+     * Offboarding (BE-06): the last day the person may sign in, in the
+     * company calendar. After it the account becomes DEACTIVATED (see
+     * settleAccountStatus in accounts.ts). Null when no offboarding is set.
+     */
+    lastWorkingDay: plainDateField(),
   },
   baseSchemaOptions
 )

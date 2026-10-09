@@ -40,6 +40,11 @@ import {
   startSession,
   type AuthTokens,
 } from "./sessions.ts"
+import {
+  emailTaken,
+  isDuplicateEmail,
+  settleAccountStatus,
+} from "./accounts.ts"
 import { hashToken, randomToken } from "./tokens.ts"
 import {
   normalizeEmail,
@@ -76,14 +81,6 @@ function assertPassword(
 }
 
 /** Duplicate key on users.email (a parallel signup won the race). */
-function isDuplicateEmail(error: unknown): boolean {
-  const e = error as { code?: number; keyPattern?: Record<string, unknown> }
-  return e?.code === 11000 && Boolean(e.keyPattern?.email)
-}
-
-const emailTaken = () =>
-  apiErrors.fieldError("email", "ALREADY_EXISTS", "email is already registered")
-
 // ─────────────────────────── signup ───────────────────────────
 
 export async function signup(
@@ -171,7 +168,8 @@ export async function login(
     throw apiErrors.invalidCredentials()
   }
   // Only revealed after a correct password, so it can't be used to probe emails.
-  if (user.status === "DEACTIVATED") throw apiErrors.accountDeactivated()
+  const status = await settleAccountStatus(user, deps)
+  if (status === "DEACTIVATED") throw apiErrors.accountDeactivated()
 
   await clearAttempts(limitKey)
   return startSession(
@@ -185,7 +183,11 @@ export async function refresh(
   deps: AuthDeps
 ): Promise<AuthTokens> {
   return refreshSession(refreshToken, sessionDeps(deps), async (owner) => {
-    const status = await userStatus(owner.userId, owner.companyId)
+    const user = await UserModel.findOne(
+      { _id: owner.userId, companyId: owner.companyId },
+      { status: 1, lastWorkingDay: 1, companyId: 1 }
+    ).lean()
+    const status = user ? await settleAccountStatus(user, deps) : undefined
     if (status === "ACTIVE") return
     if (status === "DEACTIVATED") {
       await revokeUserSessions(owner.userId, "ACCOUNT_DEACTIVATED")
@@ -193,17 +195,6 @@ export async function refresh(
     }
     throw apiErrors.sessionExpired()
   })
-}
-
-export async function userStatus(
-  userId: string,
-  companyId: string
-): Promise<UserStatus | undefined> {
-  const user = await UserModel.findOne(
-    { _id: userId, companyId },
-    { status: 1 }
-  ).lean()
-  return user?.status as UserStatus | undefined
 }
 
 // ─────────────────────────── one-time links ───────────────────────────

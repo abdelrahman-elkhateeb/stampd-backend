@@ -2,6 +2,7 @@ import type { Request, RequestHandler } from "express"
 
 import { apiErrors } from "../../platform/http/errors.ts"
 import type { Clock } from "../../platform/time/clock.ts"
+import { settleAccountStatus } from "./accounts.ts"
 import { isSessionActive } from "./sessions.ts"
 import { verifyAccessToken } from "./tokens.ts"
 import { UserModel, type Role } from "./user.model.ts"
@@ -41,12 +42,14 @@ export function requireAuth(deps: {
       isSessionActive(claims.sid, claims.sub),
       UserModel.findOne(
         { _id: claims.sub, companyId: claims.cid },
-        { role: 1, status: 1 }
+        { role: 1, status: 1, lastWorkingDay: 1, companyId: 1 }
       ).lean(),
     ])
     if (!sessionActive || !user) throw apiErrors.unauthenticated()
-    if (user.status === "DEACTIVATED") throw apiErrors.accountDeactivated()
-    if (user.status !== "ACTIVE") throw apiErrors.unauthenticated()
+    // Ends access once an offboarded employee's last working day is over.
+    const status = await settleAccountStatus(user, deps)
+    if (status === "DEACTIVATED") throw apiErrors.accountDeactivated()
+    if (status !== "ACTIVE") throw apiErrors.unauthenticated()
 
     req.auth = {
       userId: user._id,

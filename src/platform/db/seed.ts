@@ -13,6 +13,7 @@ import {
   CompanyModel,
   DEFAULT_WORKING_DAYS,
 } from "../../modules/organization/company.model.ts"
+import { DepartmentModel } from "../../modules/organization/department.model.ts"
 import { EmployeeModel } from "../../modules/organization/employee.model.ts"
 
 /**
@@ -40,6 +41,15 @@ type DemoAccount = {
   locale: Locale
   /** Direct manager (BE-03 team scope): the demo manager leads the employees */
   managerId: string | null
+  /** BE-06 profile */
+  jobTitle: string
+  joiningDate: string
+}
+
+/** One demo department (BE-06): the manager's team works in Operations. */
+export const DEMO_DEPARTMENT = {
+  _id: "7e3a9c1b-2d4f-4a6e-8b0c-1d2e3f4a5b6c",
+  name: "Operations",
 }
 
 const ADMIN_ID = "0b6c2f0e-8d7a-4a51-9a0e-2a4f7b8c9d10"
@@ -54,6 +64,8 @@ export const DEMO_ACCOUNTS: readonly DemoAccount[] = [
     status: "ACTIVE",
     locale: "en",
     managerId: null,
+    jobTitle: "HR Manager",
+    joiningDate: "2023-01-15",
   },
   {
     id: MANAGER_ID,
@@ -63,6 +75,8 @@ export const DEMO_ACCOUNTS: readonly DemoAccount[] = [
     status: "ACTIVE",
     locale: "ar",
     managerId: ADMIN_ID,
+    jobTitle: "Operations Manager",
+    joiningDate: "2023-03-01",
   },
   {
     id: "9c8b7a6d-5e4f-4321-9abc-def012345678",
@@ -72,6 +86,8 @@ export const DEMO_ACCOUNTS: readonly DemoAccount[] = [
     status: "ACTIVE",
     locale: "en",
     managerId: MANAGER_ID,
+    jobTitle: "Operations Specialist",
+    joiningDate: "2024-06-02",
   },
   {
     id: "1d2c3b4a-5f6e-4d7c-8b9a-0f1e2d3c4b5a",
@@ -81,6 +97,8 @@ export const DEMO_ACCOUNTS: readonly DemoAccount[] = [
     status: "DEACTIVATED",
     locale: "en",
     managerId: MANAGER_ID,
+    jobTitle: "Operations Specialist",
+    joiningDate: "2024-06-02",
   },
   {
     id: "3b9f2c1d-7a6e-4f5d-9c8b-1a2b3c4d5e6f",
@@ -90,6 +108,8 @@ export const DEMO_ACCOUNTS: readonly DemoAccount[] = [
     status: "INVITED",
     locale: "en",
     managerId: MANAGER_ID,
+    jobTitle: "Operations Specialist",
+    joiningDate: "2024-06-02",
   },
 ]
 
@@ -108,11 +128,33 @@ export async function seedDemoData(
     { upsert: true, runValidators: true }
   )
 
+  await DepartmentModel.updateOne(
+    { _id: DEMO_DEPARTMENT._id, companyId },
+    {
+      $set: {
+        name: DEMO_DEPARTMENT.name,
+        nameKey: DEMO_DEPARTMENT.name.toLowerCase(),
+      },
+    },
+    { upsert: true, runValidators: true }
+  )
+
   const passwordHash = await hashPassword(DEMO_PASSWORD)
   for (const account of DEMO_ACCOUNTS) {
     await EmployeeModel.updateOne(
       { _id: account.id, companyId },
-      { $set: { name: account.name, managerId: account.managerId } },
+      {
+        $set: {
+          name: account.name,
+          managerId: account.managerId,
+          jobTitle: account.jobTitle,
+          joiningDate: account.joiningDate,
+          departmentId:
+            account.managerId === MANAGER_ID || account.id === MANAGER_ID
+              ? DEMO_DEPARTMENT._id
+              : null,
+        },
+      },
       { upsert: true, runValidators: true }
     )
     await UserModel.updateOne(

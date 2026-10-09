@@ -58,6 +58,8 @@ export const PERMISSIONS = {
     edit: ADMIN_ONLY,
     delete: ADMIN_ONLY,
   },
+  /** The employee list (BE-06): no company directory for Employees in the MVP */
+  employeeDirectory: { view: { MANAGER: ["team"], ADMIN: ["company"] } },
   /** Profile photo (BE-05 uploads): your own, or the Admin for anyone */
   employeePhoto: { edit: { ...SELF, ADMIN: ["company"] } },
   /** Clock in/out and timesheets (BE-07, BE-08); corrections by Admin/HR */

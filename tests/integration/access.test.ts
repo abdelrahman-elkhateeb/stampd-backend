@@ -16,6 +16,7 @@ import { MODULES } from "../../src/modules/index.ts"
 import type { AppModule } from "../../src/modules/module.ts"
 import { hashPassword } from "../../src/modules/identity/passwords.ts"
 import { UserModel, type Role } from "../../src/modules/identity/user.model.ts"
+import { DepartmentModel } from "../../src/modules/organization/department.model.ts"
 import { CompanyModel } from "../../src/modules/organization/company.model.ts"
 import {
   createEmployee,
@@ -430,14 +431,14 @@ describe("role changes and reporting lines", () => {
         companyId: org.companyId,
         managerId: other.manager.id,
       })
-    ).toBe("INVALID_MANAGER")
+    ).toBe("UNKNOWN_MANAGER")
     expect(
       await setLine({
         id: org.report.id,
         companyId: org.companyId,
         managerId: org.report.id,
       })
-    ).toBe("INVALID_MANAGER")
+    ).toBe("SELF_MANAGER")
     expect(
       await setLine({
         id: other.report.id,
@@ -451,6 +452,12 @@ describe("role changes and reporting lines", () => {
 describe("availability viewer (who sees colleagues' details)", () => {
   it("knows the viewer's department and whose entries they see in full", async () => {
     const org = await orgChart("Whiskey")
+    await DepartmentModel.create({
+      _id: "11111111-1111-4111-8111-111111111111",
+      companyId: org.companyId,
+      name: "Sales",
+      nameKey: "sales",
+    })
     await setLine({
       id: org.manager.id,
       companyId: org.companyId,

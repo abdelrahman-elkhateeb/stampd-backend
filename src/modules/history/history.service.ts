@@ -30,6 +30,8 @@ export const HISTORY_ACTIONS = {
   },
   "employee.statusChanged": { entityType: "EMPLOYEE", reason: "optional" },
   "employee.photoChanged": { entityType: "EMPLOYEE", reason: "optional" },
+  "employee.created": { entityType: "EMPLOYEE", reason: "optional" },
+  "employee.profileChanged": { entityType: "EMPLOYEE", reason: "optional" },
   // Company settings (BE-05)
   "companySettings.changed": {
     entityType: "COMPANY_SETTINGS",
@@ -39,6 +41,10 @@ export const HISTORY_ACTIONS = {
   "holiday.added": { entityType: "COMPANY_SETTINGS", reason: "optional" },
   "holiday.changed": { entityType: "COMPANY_SETTINGS", reason: "optional" },
   "holiday.removed": { entityType: "COMPANY_SETTINGS", reason: "optional" },
+  // Departments (BE-06): also on the company settings' history
+  "department.added": { entityType: "COMPANY_SETTINGS", reason: "optional" },
+  "department.renamed": { entityType: "COMPANY_SETTINGS", reason: "optional" },
+  "department.removed": { entityType: "COMPANY_SETTINGS", reason: "optional" },
 } as const satisfies Record<
   string,
   { entityType: EntityType; reason: "optional" | "required" }

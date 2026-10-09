@@ -2,6 +2,8 @@ import { withTransaction } from "../../platform/db/connection.ts"
 import type { Clock } from "../../platform/time/clock.ts"
 import { recordHistory, type HistoryActor } from "../history/history.service.ts"
 import { CompanyModel, type Weekday } from "./company.model.ts"
+import { getAccount } from "../identity/accounts.ts"
+import { DepartmentModel } from "./department.model.ts"
 import { EmployeeModel } from "./employee.model.ts"
 
 /**
@@ -124,13 +126,64 @@ export async function listDepartmentMemberIds(input: {
   return members.map((member) => member._id)
 }
 
+export type ReportingLineResult =
+  | "UPDATED"
+  | "NOT_FOUND"
+  | "UNKNOWN_MANAGER"
+  | "SELF_MANAGER"
+  | "NOT_A_MANAGER"
+  | "MANAGER_LOOP"
+  | "UNKNOWN_DEPARTMENT"
+
+/**
+ * Why a manager can't manage an employee, or undefined when they can:
+ *  - the manager must be another employee of the same company,
+ *  - with the Manager or Admin role and not deactivated,
+ *  - and not someone who reports to the employee, directly or not
+ *    (A manages B, so B can't manage A).
+ */
+export async function managerProblem(input: {
+  employeeId: string
+  managerId: string
+  companyId: string
+}): Promise<
+  | Exclude<ReportingLineResult, "UPDATED" | "NOT_FOUND" | "UNKNOWN_DEPARTMENT">
+  | undefined
+> {
+  const { employeeId, managerId, companyId } = input
+  if (managerId === employeeId) return "SELF_MANAGER"
+  const account = await getAccount({ id: managerId, companyId })
+  if (
+    !account ||
+    !(await EmployeeModel.exists({ _id: managerId, companyId }))
+  ) {
+    return "UNKNOWN_MANAGER"
+  }
+  if (account.role === "EMPLOYEE" || account.status === "DEACTIVATED") {
+    return "NOT_A_MANAGER"
+  }
+  // Walk up from the new manager; reaching the employee means a loop.
+  const seen = new Set<string>()
+  let current: string | null = managerId
+  while (current && !seen.has(current)) {
+    if (current === employeeId) return "MANAGER_LOOP"
+    seen.add(current)
+    const next: { managerId?: string | null } | null =
+      await EmployeeModel.findOne(
+        { _id: current, companyId },
+        { managerId: 1 }
+      ).lean()
+    current = next?.managerId ?? null
+  }
+  return undefined
+}
+
 /**
  * Changes an employee's manager and/or department (a field left out stays as
  * it is; null clears it), and records it in the employee's history
  * (employee.reportingLineChanged) in the same transaction. Access follows at
- * once: the old manager loses the employee on their next request. The manager
- * must be another employee of the same company. BE-06 adds the HTTP endpoint
- * and loop prevention.
+ * once: the old manager loses the employee on their next request. The
+ * manager rules are in managerProblem(); the department must exist.
  */
 export async function setReportingLine(
   input: {
@@ -142,12 +195,22 @@ export async function setReportingLine(
     reason?: string | null
   },
   deps: { clock: Clock }
-): Promise<"UPDATED" | "NOT_FOUND" | "INVALID_MANAGER"> {
+): Promise<ReportingLineResult> {
   const { id, companyId, managerId, departmentId } = input
+  if (!(await EmployeeModel.exists({ _id: id, companyId }))) return "NOT_FOUND"
   if (managerId != null) {
-    if (managerId === id) return "INVALID_MANAGER"
-    const manager = await EmployeeModel.exists({ _id: managerId, companyId })
-    if (!manager) return "INVALID_MANAGER"
+    const problem = await managerProblem({
+      employeeId: id,
+      managerId,
+      companyId,
+    })
+    if (problem) return problem
+  }
+  if (
+    departmentId != null &&
+    !(await DepartmentModel.exists({ _id: departmentId, companyId }))
+  ) {
+    return "UNKNOWN_DEPARTMENT"
   }
   const change = {
     ...(managerId === undefined ? {} : { managerId }),
