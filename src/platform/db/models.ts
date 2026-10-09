@@ -26,3 +26,4 @@ export {
   LeaveTypeModel,
   LeaveYearRunModel,
 } from "../../modules/leave/leave.model.ts"
+export { RequestModel } from "../../modules/requests/request.model.ts"

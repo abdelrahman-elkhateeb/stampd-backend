@@ -35,6 +35,9 @@ export type ErrorCode =
   | "LEAVE_TYPE_IN_USE"
   | "LEAVE_TYPE_NOT_TRACKED"
   | "INSUFFICIENT_BALANCE"
+  // BE-09: requests
+  | "REQUEST_STATUS_CONFLICT"
+  | "REQUEST_STARTED"
 
 export const FIELD_ERROR_CODES = [
   "REQUIRED",

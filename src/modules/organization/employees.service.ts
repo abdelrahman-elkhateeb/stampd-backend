@@ -551,6 +551,7 @@ export type OffboardingHook = {
     employeeId: string
     lastWorkingDay: PlainDate
     actor: HistoryActor
+    deps: Deps
   }): Promise<void>
 }
 
@@ -659,7 +660,13 @@ export async function deactivateEmployee(
       )
     }
     for (const hook of offboardingHooks) {
-      await hook.apply({ companyId, employeeId: id, lastWorkingDay, actor })
+      await hook.apply({
+        companyId,
+        employeeId: id,
+        lastWorkingDay,
+        actor,
+        deps,
+      })
     }
     const status = await setLastWorkingDay({
       id,

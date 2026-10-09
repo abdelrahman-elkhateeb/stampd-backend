@@ -11,6 +11,11 @@ mongoose.set("transactionAsyncLocalStorage", true)
  * Runs fn in a MongoDB transaction (needs a replica set: compose, Atlas,
  * tests). Inside another withTransaction it joins the outer transaction, so
  * services can use it without knowing whether their caller already did.
+ *
+ * Inside a transaction, never start with queries in parallel
+ * (Promise.all): the first operation starts the transaction, and MongoDB
+ * refuses two operations starting it at once. After one awaited query,
+ * parallel reads are fine.
  */
 export function withTransaction<T>(fn: () => Promise<T>): Promise<T> {
   if (inTransaction()) return fn()

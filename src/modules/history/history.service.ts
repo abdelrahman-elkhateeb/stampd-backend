@@ -182,3 +182,28 @@ export async function recordHistory(
   ])
   return entry!._id
 }
+
+/** A record's history entries, oldest first (for timelines inside other modules). */
+export async function listHistoryEntries(input: {
+  companyId: string
+  entityType: EntityType
+  entityId: string
+}) {
+  const entries = await HistoryEntryModel.find({
+    companyId: input.companyId,
+    entityType: input.entityType,
+    entityId: input.entityId,
+  })
+    .sort({ at: 1, _id: 1 })
+    .lean()
+  return entries.map((entry) => ({
+    action: entry.action,
+    at: entry.at,
+    actorId: entry.actorId ?? null,
+    systemJob: entry.systemJob ?? null,
+    source: entry.source as HistorySource,
+    oldValues: entry.oldValues as Record<string, unknown>,
+    newValues: entry.newValues as Record<string, unknown>,
+    reason: entry.reason ?? null,
+  }))
+}
