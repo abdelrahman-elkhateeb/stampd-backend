@@ -17,7 +17,7 @@ export const HISTORY_ACTIONS = {
   "attendance.recorded": { entityType: "ATTENDANCE_DAY", reason: "optional" },
   "attendance.corrected": { entityType: "ATTENDANCE_DAY", reason: "required" },
   "attendance.closed": { entityType: "ATTENDANCE_DAY", reason: "optional" },
-  // Leave balances (BE-10, BE-11): accruals and deductions vs manual adjustments
+  // Leave balances (BE-08 ledger): automatic changes vs manual adjustments
   "leaveBalance.changed": { entityType: "LEAVE_BALANCE", reason: "optional" },
   "leaveBalance.adjusted": { entityType: "LEAVE_BALANCE", reason: "required" },
   // Requests (BE-09)

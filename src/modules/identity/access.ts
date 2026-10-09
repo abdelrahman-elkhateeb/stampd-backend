@@ -60,7 +60,7 @@ export const PERMISSIONS = {
   },
   /** Clock in/out and timesheets (BE-07, BE-08); corrections by Admin/HR */
   attendance: { view: PERSONAL, create: SELF, edit: ADMIN_ONLY },
-  /** Leave requests and balances (BE-10, BE-11); edit = cancel your own */
+  /** Leave balances (BE-08) and leave requests (BE-10); edit = cancel your own */
   leave: { view: PERSONAL, create: SELF, edit: SELF, approve: APPROVERS },
   /** WFH, business trips, permissions and other requests (BE-09) */
   requests: { view: PERSONAL, create: SELF, edit: SELF, approve: APPROVERS },

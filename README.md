@@ -176,7 +176,7 @@ Tenant-owned models declare `companyId: tenantIdField()` and use `schema.plugin(
 | `attendance` (BE-07, BE-08)                | view                       | self     | self + team | company  |
 |                                            | create (clock in/out)      | self     | self        | self     |
 |                                            | edit (corrections)         | —        | —           | company  |
-| `leave` (BE-10, BE-11), `requests` (BE-09) | view                       | self     | self + team | company  |
+| `leave` (BE-08, BE-10), `requests` (BE-09) | view                       | self     | self + team | company  |
 |                                            | create / edit (cancel own) | self     | self        | self     |
 |                                            | approve                    | —        | team        | company  |
 | `reports` (BE-13)                          | view                       | self     | self + team | company  |
