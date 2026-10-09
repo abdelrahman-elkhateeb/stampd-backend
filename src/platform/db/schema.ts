@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto"
+import { randomBytes, randomUUID } from "node:crypto"
 import type { SchemaOptions } from "mongoose"
 
 import { isPlainDate } from "../time/time.ts"
@@ -18,6 +18,31 @@ export const uuidId = () => ({
   type: String,
   default: () => randomUUID(),
 })
+
+/**
+ * A time-ordered UUID (version 7): the first 48 bits are the creation time in
+ * milliseconds, then a counter, so ids created in the same millisecond still
+ * sort in creation order (within a server). For append-only records listed
+ * by time, e.g. history, where two entries can share a timestamp.
+ */
+let lastMs = 0
+let counter = 0
+export function uuidV7(now = Date.now()): string {
+  if (now <= lastMs) {
+    counter += 1
+    now = lastMs
+  } else {
+    lastMs = now
+    counter = 0
+  }
+  const bytes = randomBytes(16)
+  bytes.writeUIntBE(now, 0, 6)
+  bytes[6] = 0x70 | ((counter >> 8) & 0x0f) // version 7 + counter (high)
+  bytes[7] = counter & 0xff // counter (low)
+  bytes[8] = 0x80 | (bytes[8]! & 0x3f) // variant
+  const hex = bytes.toString("hex")
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
 
 export const plainDateField = (options: { required?: boolean } = {}) => ({
   type: String,

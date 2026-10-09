@@ -48,3 +48,18 @@ describe("history: reason rule", () => {
     expect(() => assertReason("attendance.recorded", undefined)).not.toThrow()
   })
 })
+
+describe("history ids", () => {
+  it("are UUIDs that sort in creation order, even within one millisecond", async () => {
+    const { uuidV7 } = await import("../../src/platform/db/schema.ts")
+    const ids = Array.from({ length: 50 }, () => uuidV7(1_700_000_000_000))
+    expect([...ids].sort()).toEqual(ids)
+    expect(new Set(ids).size).toBe(50)
+    for (const id of ids) {
+      expect(id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+      )
+    }
+    expect(uuidV7(1_700_000_000_001) > ids.at(-1)!).toBe(true)
+  })
+})

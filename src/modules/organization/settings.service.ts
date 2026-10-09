@@ -464,3 +464,33 @@ export async function removeHoliday(
     return true
   })
 }
+
+/** What attendance needs from the settings (BE-07). */
+export type AttendanceRules = {
+  timezone: string
+  timezoneHistory: { timezone: string; until: string }[]
+  workStartTime: string
+  lateGraceMinutes: number
+}
+
+export async function getAttendanceRules(
+  companyId: string
+): Promise<AttendanceRules | undefined> {
+  const company = await loadCompany(companyId)
+  if (!company) return undefined
+  return {
+    timezone: company.timezone,
+    timezoneHistory: (company.timezoneHistory ?? []).flatMap((entry) =>
+      entry.until ? [{ timezone: entry.timezone, until: entry.until }] : []
+    ),
+    workStartTime: company.workStartTime ?? DEFAULT_SETTINGS.workStartTime,
+    lateGraceMinutes:
+      company.lateGraceMinutes ?? DEFAULT_SETTINGS.lateGraceMinutes,
+  }
+}
+
+/** Every company id (for jobs that run per company, e.g. the attendance close). */
+export async function listCompanyIds(): Promise<string[]> {
+  const companies = await CompanyModel.find({}, { _id: 1 }).lean()
+  return companies.map((company) => company._id)
+}

@@ -62,8 +62,10 @@ export const PERMISSIONS = {
   employeeDirectory: { view: { MANAGER: ["team"], ADMIN: ["company"] } },
   /** Profile photo (BE-05 uploads): your own, or the Admin for anyone */
   employeePhoto: { edit: { ...SELF, ADMIN: ["company"] } },
-  /** Clock in/out and timesheets (BE-07, BE-08); corrections by Admin/HR */
+  /** Check-in/out, days and corrections (BE-07); corrections by Admin/HR only */
   attendance: { view: PERSONAL, create: SELF, edit: ADMIN_ONLY },
+  /** Missing Checkout / Absent list (BE-07) */
+  attendanceExceptions: { view: ADMIN_ONLY },
   /** Leave balances (BE-08) and leave requests (BE-10); edit = cancel your own */
   leave: { view: PERSONAL, create: SELF, edit: SELF, approve: APPROVERS },
   /** WFH, business trips, permissions and other requests (BE-09) */

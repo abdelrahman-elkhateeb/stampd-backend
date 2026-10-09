@@ -257,3 +257,45 @@ export async function getEmployeeNames(input: {
   ).lean()
   return new Map(employees.map((employee) => [employee._id, employee.name]))
 }
+
+/** What attendance needs to know about each employee (BE-07). */
+export type RosterEntry = {
+  id: string
+  name: string
+  departmentId: string | null
+  managerId: string | null
+  tracksAttendance: boolean
+  joiningDate: string | null
+}
+
+/** Employees of a company, optionally only some ids or one department, by name. */
+export async function getRoster(input: {
+  companyId: string
+  ids?: string[]
+  departmentId?: string
+}): Promise<RosterEntry[]> {
+  const employees = await EmployeeModel.find(
+    {
+      companyId: input.companyId,
+      ...(input.ids ? { _id: { $in: input.ids } } : {}),
+      ...(input.departmentId ? { departmentId: input.departmentId } : {}),
+    },
+    {
+      name: 1,
+      departmentId: 1,
+      managerId: 1,
+      tracksAttendance: 1,
+      joiningDate: 1,
+    }
+  )
+    .sort({ name: 1, _id: 1 })
+    .lean()
+  return employees.map((e) => ({
+    id: e._id,
+    name: e.name,
+    departmentId: e.departmentId ?? null,
+    managerId: e.managerId ?? null,
+    tracksAttendance: e.tracksAttendance ?? true,
+    joiningDate: e.joiningDate ?? null,
+  }))
+}

@@ -69,3 +69,23 @@ export function isTimeZone(value: string): boolean {
     return false
   }
 }
+
+/** Seconds since midnight of an instant's day in a timezone (0 … 86399). */
+export function secondsIntoDay(instant: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(instant)
+  const get = (type: string) =>
+    Number(parts.find((part) => part.type === type)?.value ?? 0)
+  return get("hour") * 3600 + get("minute") * 60 + get("second")
+}
+
+/** "HH:mm" → minutes since midnight. */
+export function minutesOfLocalTime(time: string): number {
+  const [hours, minutes] = time.split(":").map(Number) as [number, number]
+  return hours * 60 + minutes
+}

@@ -1,6 +1,7 @@
 import type { Router } from "express"
 
 import type { Config } from "../config/env.ts"
+import type { Job } from "../platform/jobs.ts"
 import type { Logger } from "../platform/logging/logger.ts"
 import type { Clock } from "../platform/time/clock.ts"
 
@@ -23,4 +24,6 @@ export type AppModule = {
   name: string
   /** Express router with this module's endpoints, or undefined while it has none */
   routes(deps: AppDeps): Router | undefined
+  /** Background jobs the server runs (server.ts starts them once MongoDB is connected) */
+  jobs?(deps: AppDeps): Job[]
 }

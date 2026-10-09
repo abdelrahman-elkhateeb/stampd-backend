@@ -107,7 +107,8 @@ export const historyModule: AppModule = {
           const page = toPageRequest(query)
           const [entries, total] = await Promise.all([
             HistoryEntryModel.find(filter)
-              .sort(page.mongoSort)
+              // Ties (same millisecond) break by the time-ordered id, same direction.
+              .sort({ at: page.mongoSort.at!, _id: page.mongoSort.at! })
               .skip(page.skip)
               .limit(page.limit)
               .lean(),

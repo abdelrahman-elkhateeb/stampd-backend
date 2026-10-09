@@ -12,7 +12,10 @@ import {
   disconnectDatabase,
   pingDatabase,
 } from "./platform/db/connection.ts"
+import { startJobs } from "./platform/jobs.ts"
 import { createLogger } from "./platform/logging/logger.ts"
+import { MODULES } from "./modules/index.ts"
+import { systemClock } from "./platform/time/clock.ts"
 
 let config: Config
 try {
@@ -36,11 +39,22 @@ const server = app.listen(config.port, config.host, () => {
 })
 
 let stopping = false
+let stopJobs = () => {}
 async function connectWithRetry(): Promise<void> {
   while (!stopping) {
     try {
       await connectDatabase(config.mongodbUri)
       logger.info("database connected")
+      const deps = {
+        config,
+        logger,
+        checkDatabase: () => pingDatabase(),
+        clock: systemClock,
+      }
+      stopJobs = startJobs(
+        MODULES.flatMap((module) => module.jobs?.(deps) ?? []),
+        logger
+      )
       return
     } catch (error) {
       logger.error("database connection failed; retrying in 5 s", { error })
@@ -52,6 +66,7 @@ void connectWithRetry()
 
 async function shutdown(signal: string) {
   stopping = true
+  stopJobs()
   logger.info("shutting down", { signal })
   server.close()
   await disconnectDatabase()

@@ -28,6 +28,9 @@ export type ErrorCode =
   | "DEPARTMENT_NOT_EMPTY"
   | "HAS_DIRECT_REPORTS"
   | "LAST_ADMIN"
+  // BE-07: attendance
+  | "ATTENDANCE_NOT_TRACKED"
+  | "NO_OPEN_SESSION"
 
 export const FIELD_ERROR_CODES = [
   "REQUIRED",

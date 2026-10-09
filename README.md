@@ -2,7 +2,7 @@
 
 API for **Stampd**, the Employee Ops Platform (attendance, leave, requests and approvals for GCC teams).
 
-**Status:** BE-01 (foundation), BE-02 (authentication, company signup, tenant isolation) BE-03 (roles, data scopes, permission checks), BE-04 (change history), BE-05 (company settings, work calendar, holidays, image uploads) and BE-06 (departments, employee management, offboarding) are in place. Endpoints: health, signup, login, sessions, invitations, password reset, current user, change password, a record's history, settings, calendar, holidays, logo and photo uploads, departments and employees (table below). BE-03 adds no endpoints; it adds the checks every later endpoint uses. The other business endpoints arrive with BE-07 … BE-15.
+**Status:** BE-01 (foundation), BE-02 (authentication, company signup, tenant isolation) BE-03 (roles, data scopes, permission checks), BE-04 (change history), BE-05 (company settings, work calendar, holidays, image uploads) BE-06 (departments, employee management, offboarding) and BE-07 (attendance: check-in/out, daily status, end-of-day close, corrections) are in place. Endpoints: health, signup, login, sessions, invitations, password reset, current user, change password, a record's history, settings, calendar, holidays, logo and photo uploads, departments, employees and attendance (table below). BE-03 adds no endpoints; it adds the checks every later endpoint uses. The other business endpoints arrive with BE-08 … BE-15.
 
 **Stack:** TypeScript · Express 5 · MongoDB · Mongoose · Zod. Those three (express, mongoose, zod) are the only runtime dependencies. Node 24, pnpm.
 
@@ -36,40 +36,46 @@ curl -s -X POST http://localhost:4000/auth/login -H 'content-type: application/j
 
 ## Endpoints
 
-| Method                | Path                                                   | Auth                            | Response                                                                                                                       | Ticket |
-| --------------------- | ------------------------------------------------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------ |
-| GET                   | `/health`                                              | none                            | `200 {"status":"OK","database":"UP"}`, or `503 {"status":"DEGRADED","database":"DOWN"}` when MongoDB doesn't answer within 2 s | BE-01  |
-| POST                  | `/auth/signup`                                         | none                            | `201` tokens: new company + Admin account (also an employee)                                                                   | BE-02  |
-| POST                  | `/auth/login`                                          | none                            | `200` tokens                                                                                                                   | BE-02  |
-| POST                  | `/auth/refresh`                                        | none                            | `200` new token pair (rotation, 20 s grace window)                                                                             | BE-02  |
-| POST                  | `/auth/logout`                                         | none                            | `204`, ends the session                                                                                                        | BE-02  |
-| POST                  | `/auth/invitations/verify`                             | none                            | `200 { companyName, name, email, expiresAt }`                                                                                  | BE-02  |
-| POST                  | `/auth/invitations/accept`                             | none                            | `200` tokens                                                                                                                   | BE-02  |
-| POST                  | `/auth/password/forgot`                                | none                            | `202` always                                                                                                                   | BE-02  |
-| POST                  | `/auth/password/reset/verify`                          | none                            | `204` when the link is usable                                                                                                  | BE-02  |
-| POST                  | `/auth/password/reset`                                 | none                            | `200` tokens; ends every other session                                                                                         | BE-02  |
-| GET                   | `/me`                                                  | bearer                          | `200` current user, employee and company basics                                                                                | BE-02  |
-| POST                  | `/me/password`                                         | bearer                          | `204`; ends the user's other sessions                                                                                          | BE-02  |
-| GET                   | `/history/{recordType}/{id}`                           | bearer                          | `200 { items, meta }`: the record's changes, newest first; `404` when the caller can't read the record                         | BE-04  |
-| GET                   | `/company/settings`                                    | bearer                          | `200` settings (every role)                                                                                                    | BE-05  |
-| PATCH                 | `/company/settings`                                    | bearer, Admin                   | `200` settings; timezone changes apply from the next day                                                                       | BE-05  |
-| PUT / DELETE          | `/company/logo`                                        | bearer, Admin                   | raw PNG/JPEG/WebP body ≤ 2 MB → `200 { logoUrl }` / `204`                                                                      | BE-05  |
-| PUT / DELETE          | `/employees/{id}/photo`                                | bearer, own or Admin            | raw image body → `200 { photoUrl }` / `204`                                                                                    | BE-05  |
-| GET                   | `/files/{id}?expires&signature`                        | signed URL                      | the image (URLs come from the endpoints above)                                                                                 | BE-05  |
-| GET                   | `/company/holidays?year=`                              | bearer                          | `200 { year, items }` (every role)                                                                                             | BE-05  |
-| POST / PATCH / DELETE | `/company/holidays[/{id}]`                             | bearer, Admin                   | `201`/`200 { holiday, affectedRequests }` / `204`                                                                              | BE-05  |
-| GET                   | `/company/calendar?from&to`                            | bearer                          | `200 { workingDayCount, days }` (every role)                                                                                   | BE-05  |
-| GET                   | `/departments`                                         | bearer                          | `200 { items }` (every role)                                                                                                   | BE-06  |
-| POST / PATCH / DELETE | `/departments[/{id}]`                                  | bearer, Admin                   | `201` / `200` / `204`; `409 DEPARTMENT_NOT_EMPTY`                                                                              | BE-06  |
-| GET                   | `/employees?search&departmentId&managerId&status&role` | bearer, Manager (team) or Admin | `200 { items, meta }`; Employees `403`                                                                                         | BE-06  |
-| POST                  | `/employees`                                           | bearer, Admin                   | `201 { employee, invitation }` (invite sent)                                                                                   | BE-06  |
-| POST                  | `/employees/import`                                    | bearer, Admin                   | CSV body → `200 { createdCount, created, errors }`                                                                             | BE-06  |
-| GET / PATCH           | `/employees/{id}`                                      | bearer                          | profile; Admin edits all, others only their own phone                                                                          | BE-06  |
-| POST                  | `/employees/{id}/invitation`                           | bearer, Admin                   | `200 { expiresAt }`: resend                                                                                                    | BE-06  |
-| POST                  | `/employees/{id}/deactivation/preview`                 | bearer, Admin                   | `200` impact (reports, pending requests, future time off)                                                                      | BE-06  |
-| POST                  | `/employees/{id}/deactivation`, `/reactivation`        | bearer, Admin                   | `200` profile                                                                                                                  | BE-06  |
+| Method                | Path                                                                           | Auth                            | Response                                                                                                                       | Ticket |
+| --------------------- | ------------------------------------------------------------------------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------ |
+| GET                   | `/health`                                                                      | none                            | `200 {"status":"OK","database":"UP"}`, or `503 {"status":"DEGRADED","database":"DOWN"}` when MongoDB doesn't answer within 2 s | BE-01  |
+| POST                  | `/auth/signup`                                                                 | none                            | `201` tokens: new company + Admin account (also an employee)                                                                   | BE-02  |
+| POST                  | `/auth/login`                                                                  | none                            | `200` tokens                                                                                                                   | BE-02  |
+| POST                  | `/auth/refresh`                                                                | none                            | `200` new token pair (rotation, 20 s grace window)                                                                             | BE-02  |
+| POST                  | `/auth/logout`                                                                 | none                            | `204`, ends the session                                                                                                        | BE-02  |
+| POST                  | `/auth/invitations/verify`                                                     | none                            | `200 { companyName, name, email, expiresAt }`                                                                                  | BE-02  |
+| POST                  | `/auth/invitations/accept`                                                     | none                            | `200` tokens                                                                                                                   | BE-02  |
+| POST                  | `/auth/password/forgot`                                                        | none                            | `202` always                                                                                                                   | BE-02  |
+| POST                  | `/auth/password/reset/verify`                                                  | none                            | `204` when the link is usable                                                                                                  | BE-02  |
+| POST                  | `/auth/password/reset`                                                         | none                            | `200` tokens; ends every other session                                                                                         | BE-02  |
+| GET                   | `/me`                                                                          | bearer                          | `200` current user, employee and company basics                                                                                | BE-02  |
+| POST                  | `/me/password`                                                                 | bearer                          | `204`; ends the user's other sessions                                                                                          | BE-02  |
+| GET                   | `/history/{recordType}/{id}`                                                   | bearer                          | `200 { items, meta }`: the record's changes, newest first; `404` when the caller can't read the record                         | BE-04  |
+| GET                   | `/company/settings`                                                            | bearer                          | `200` settings (every role)                                                                                                    | BE-05  |
+| PATCH                 | `/company/settings`                                                            | bearer, Admin                   | `200` settings; timezone changes apply from the next day                                                                       | BE-05  |
+| PUT / DELETE          | `/company/logo`                                                                | bearer, Admin                   | raw PNG/JPEG/WebP body ≤ 2 MB → `200 { logoUrl }` / `204`                                                                      | BE-05  |
+| PUT / DELETE          | `/employees/{id}/photo`                                                        | bearer, own or Admin            | raw image body → `200 { photoUrl }` / `204`                                                                                    | BE-05  |
+| GET                   | `/files/{id}?expires&signature`                                                | signed URL                      | the image (URLs come from the endpoints above)                                                                                 | BE-05  |
+| GET                   | `/company/holidays?year=`                                                      | bearer                          | `200 { year, items }` (every role)                                                                                             | BE-05  |
+| POST / PATCH / DELETE | `/company/holidays[/{id}]`                                                     | bearer, Admin                   | `201`/`200 { holiday, affectedRequests }` / `204`                                                                              | BE-05  |
+| GET                   | `/company/calendar?from&to`                                                    | bearer                          | `200 { workingDayCount, days }` (every role)                                                                                   | BE-05  |
+| GET                   | `/departments`                                                                 | bearer                          | `200 { items }` (every role)                                                                                                   | BE-06  |
+| POST / PATCH / DELETE | `/departments[/{id}]`                                                          | bearer, Admin                   | `201` / `200` / `204`; `409 DEPARTMENT_NOT_EMPTY`                                                                              | BE-06  |
+| GET                   | `/employees?search&departmentId&managerId&status&role`                         | bearer, Manager (team) or Admin | `200 { items, meta }`; Employees `403`                                                                                         | BE-06  |
+| POST                  | `/employees`                                                                   | bearer, Admin                   | `201 { employee, invitation }` (invite sent)                                                                                   | BE-06  |
+| POST                  | `/employees/import`                                                            | bearer, Admin                   | CSV body → `200 { createdCount, created, errors }`                                                                             | BE-06  |
+| GET / PATCH           | `/employees/{id}`                                                              | bearer                          | profile; Admin edits all, others only their own phone                                                                          | BE-06  |
+| POST                  | `/employees/{id}/invitation`                                                   | bearer, Admin                   | `200 { expiresAt }`: resend                                                                                                    | BE-06  |
+| POST                  | `/employees/{id}/deactivation/preview`                                         | bearer, Admin                   | `200` impact (reports, pending requests, future time off)                                                                      | BE-06  |
+| POST                  | `/employees/{id}/deactivation`, `/reactivation`                                | bearer, Admin                   | `200` profile                                                                                                                  | BE-06  |
+| POST                  | `/attendance/check-in`, `/attendance/check-out`                                | bearer                          | `201`/`200` today; `409 NO_OPEN_SESSION`, `409 ATTENDANCE_NOT_TRACKED`                                                         | BE-07  |
+| GET                   | `/attendance/today`                                                            | bearer                          | `200` the caller's day: status, sessions, open session                                                                         | BE-07  |
+| GET                   | `/attendance/days?date=`, `/attendance/month?month=`                           | bearer                          | `200 { from, to, items: [{ employee, days }], meta }` (self / team / company)                                                  | BE-07  |
+| GET                   | `/attendance/employees/{id}/days/{date}`                                       | bearer                          | `200 { employee, day, sessions }`                                                                                              | BE-07  |
+| GET                   | `/attendance/exceptions?from&to&type=`                                         | bearer, Admin                   | `200 { items, meta }`: Missing Checkout and Absent                                                                             | BE-07  |
+| POST / PATCH / DELETE | `/attendance/employees/{id}/days/{date}/sessions`, `/attendance/sessions/{id}` | bearer, Admin                   | corrections with a required `reason` → day detail                                                                              | BE-07  |
 
-Each ticket adds its endpoints to this table. The exact request and response bodies and error codes of every endpoint are on its Trello ticket (BE-02 for the identity endpoints, BE-04 for history, BE-05 for settings, holidays, calendar and uploads, BE-06 for departments and employees).
+Each ticket adds its endpoints to this table. The exact request and response bodies and error codes of every endpoint are on its Trello ticket (BE-02 for the identity endpoints, BE-04 for history, BE-05 for settings, holidays, calendar and uploads, BE-06 for departments and employees, BE-07 for attendance).
 
 ## Scripts
 
@@ -127,8 +133,12 @@ src/
                             departments, employees, CSV import,           (BE-06)
                             offboarding (employees.*.ts)
                             identity/accounts.ts: email, role, status
-    attendance/ leave/ requests/ reporting/ notifications/                (BE-07 … BE-15)
+    attendance/             check-in/out, daily status engine (status.ts),  (BE-07)
+                            views, corrections, end-of-day close job
+    leave/ requests/ reporting/ notifications/                            (BE-08 … BE-15)
   platform/storage/files.ts image uploads: type check, storage, signed URLs (BE-05)
+  platform/jobs.ts          background jobs started by server.ts (BE-07)
+  platform/csv.ts           CSV reader for imports (BE-06)
   types/express.d.ts        req.id, req.log and req.auth
 tests/unit, tests/integration
 ```
@@ -195,7 +205,7 @@ Tenant-owned models declare `companyId: tenantIdField()` and use `schema.plugin(
 | ---------------------------------------------- | -------------------------- | -------- | ----------- | -------- |
 | `employee` profile (BE-06)                     | view                       | self     | self + team | company  |
 |                                                | create / edit / delete     | —        | —           | company  |
-| `attendance` (BE-07, BE-08)                    | view                       | self     | self + team | company  |
+| `attendance` (BE-07)                           | view                       | self     | self + team | company  |
 |                                                | create (clock in/out)      | self     | self        | self     |
 |                                                | edit (corrections)         | —        | —           | company  |
 | `leave` (BE-08, BE-10), `requests` (BE-09)     | view                       | self     | self + team | company  |
@@ -206,6 +216,7 @@ Tenant-owned models declare `companyId: tenantIdField()` and use `schema.plugin(
 |                                                | edit                       | —        | —           | company  |
 | `employeePhoto` (BE-05)                        | edit                       | self     | self        | company  |
 | `employeeDirectory`: the list (BE-06)          | view                       | —        | team        | company  |
+| `attendanceExceptions` (BE-07)                 | view                       | —        | —           | company  |
 | `users`: invite, role, deactivate (BE-06)      | all                        | —        | —           | company  |
 
 **Answers:**
@@ -236,6 +247,29 @@ router.patch("/company/settings", auth, requirePermission("companySettings", "ed
 - **nothing:** everything else, i.e. other departments and colleagues' business trips and permissions.
 
 Every protected endpoint gets per-role tests like `tests/integration/access.test.ts`.
+
+**Attendance (BE-07).** Sessions (check-in … check-out, server time, IP and browser stored) roll up into one **AttendanceDay** per employee and company-calendar day.
+
+- **Status engine** (`src/modules/attendance/status.ts`, pure), applied in this order:
+  1. weekend or holiday → `WEEKEND` / `HOLIDAY`, never Late or Absent; a check-in adds the flag `WORKED_ON_NON_WORKING_DAY`;
+  2. approved full-day leave, WFH or business trip → `ON_LEAVE` / `WFH` / `BUSINESS_TRIP`;
+  3. with a check-in: `MISSING_CHECKOUT` once the day is over with a session open; otherwise `LATE` when the first check-in is after work start + grace (unless an approved permission or half day covers it), else `PRESENT`;
+  4. without a check-in: `ABSENT` once a working day is over, if attendance was expected.
+- **Expected attendance:** from the joining date through the last working day, for employees with `tracksAttendance`. Invited accounts are never expected.
+- **Approved day effects:** leave and requests (BE-10/BE-11) tell attendance which days are covered through `registerDayEffectsProvider()`; until then no day has effects.
+- **Never two open sessions:** a unique index on the open flag makes a double click or two tabs return the session already open. A session can't cross the company's midnight: one left open is closed without a check-out.
+- **End-of-day close** (`close-job.ts`, every minute, started by `server.ts`): for each company, every day that is over in **its own timezone** and not closed yet (catching up at most 7 days) gets:
+  - open sessions → `MISSING_CHECKOUT` (their time doesn't count);
+  - expected employees with nothing → `ABSENT`;
+  - history entries with actor "system".
+
+  It is safe to run twice or on several servers.
+
+- **Stored vs computed:** only days with sessions, an earlier record, or `ABSENT` are stored. Weekends, holidays and approved time off without a check-in are computed when a view asks.
+- **Corrections** (`correctAttendance()`, Admin endpoints now, approved correction requests in BE-11):
+  - add, edit or remove a session, with a required `reason`;
+  - times must fall inside the company day, check-out after check-in, not in the future and with no overlaps;
+  - the day is recalculated and flagged `CORRECTED`, and history keeps the old and new sessions and status.
 
 **Employees (BE-06).** A person is two records with the same id: the **Employee** (organization: profile, employment, department, manager) and the login **User** (identity: email, role, status, last working day). `src/modules/organization/employees.service.ts` changes both in one transaction and records history.
 
@@ -352,6 +386,7 @@ Which calendar day an instant falls on depends on the company timezone: use `pla
   - `historyentries` (BE-04): append-only change history, one per change, indexed by company, record type, record id and time.
   - BE-05: `holidays` (start/end dates), `storedfiles` (uploaded images); companies gain work hours, late grace, leave year start month, `logoFileId` and `timezoneHistory`; employees gain `photoFileId`. Existing companies read the defaults (09:00–17:00, grace 0, January).
   - BE-06: `departments` (unique name per company); employees gain phone, job title, employee code (unique per company when set), joining date, employment type and `tracksAttendance`; users gain `lastWorkingDay`.
+  - BE-07: `attendancesessions` (unique open session per employee), `attendancedays` (unique per employee and day), `attendancecloseruns` (closed days per company). History ids are time-ordered UUIDs (v7), so entries from the same millisecond keep their order.
 
   Companies also store `weekStart` (default `SUN`) and the terms version, acceptance time and who accepted.
 
@@ -372,7 +407,8 @@ Which calendar day an instant falls on depends on the company timezone: use `pla
   - per-role authorization (BE-03): self / team / company, reassignment and role changes on the next request, 403 vs 404, self-approval;
   - history (BE-04): one entry per committed change, none after a rollback, the reason rule, append-only, and reading by role;
   - settings, holidays, calendar and uploads (BE-05): the card's calendar examples, the next-day timezone rule, Admin-only changes, size and type limits, and cross-company file access;
-  - departments and employees (BE-06): every acceptance criterion (duplicate email, a 50 + 2 row CSV, manager loops, offboarding with reports, login blocked after the last day, the list per role, read-only manager view, the self-service phone).
+  - departments and employees (BE-06): every acceptance criterion (duplicate email, a 50 + 2 row CSV, manager loops, offboarding with reports, login blocked after the last day, the list per role, read-only manager view, the self-service phone);
+  - attendance (BE-07): every acceptance criterion, with a clock the tests move to exact local times (09:07 vs 09:12, midnight in Dubai vs Bogotá, parallel check-ins).
 
 ## CI
 

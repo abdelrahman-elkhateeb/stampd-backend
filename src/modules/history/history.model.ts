@@ -1,6 +1,6 @@
 import { model, Schema, type InferSchemaType } from "mongoose"
 
-import { uuidId } from "../../platform/db/schema.ts"
+import { uuidV7 } from "../../platform/db/schema.ts"
 import { tenantIdField, tenantScoped } from "../../platform/db/tenant.ts"
 
 /**
@@ -24,7 +24,8 @@ export type HistorySource = (typeof HISTORY_SOURCES)[number]
 
 const historyEntrySchema = new Schema(
   {
-    _id: uuidId(),
+    /** Time-ordered, so entries of the same millisecond keep their order */
+    _id: { type: String, default: () => uuidV7() },
     companyId: tenantIdField(),
     entityType: { type: String, enum: ENTITY_TYPES, required: true },
     entityId: { type: String, required: true },

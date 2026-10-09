@@ -15,3 +15,8 @@ export {
 export { OneTimeTokenModel } from "../../modules/identity/one-time-token.model.ts"
 export { AttemptModel } from "../../modules/identity/rate-limit.ts"
 export { HistoryEntryModel } from "../../modules/history/history.model.ts"
+export {
+  AttendanceCloseRunModel,
+  AttendanceDayModel,
+  AttendanceSessionModel,
+} from "../../modules/attendance/attendance.model.ts"
