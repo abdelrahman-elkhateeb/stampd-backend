@@ -844,3 +844,68 @@ export async function recalculateStoredDays(
   const ctx = await personContext(companyId, employeeId, from, to, deps)
   for (const day of stored) await recalculateDay(ctx, employeeId, day.date!)
 }
+
+export type PersonDays = {
+  employeeId: string
+  name: string
+  days: {
+    date: PlainDate
+    /** a company working day (not weekend or holiday) */
+    working: boolean
+    /** attendance expected: tracked, joined, not past the last day, not invited */
+    expected: boolean
+    status: AttendanceStatus | null
+    flags: AttendanceFlag[]
+  }[]
+}
+
+/**
+ * Everyone's status for each day of a range, exactly as the attendance views
+ * show it (stored days as stored, the rest computed). The one source for
+ * dashboards and reports (BE-13, BE-14), so their numbers always agree.
+ */
+export async function dayStatuses(
+  input: {
+    companyId: string
+    from: PlainDate
+    to: PlainDate
+    employeeIds?: string[]
+  },
+  deps: Deps
+): Promise<PersonDays[]> {
+  const { companyId, from, to } = input
+  const roster = await getRoster({ companyId, ids: input.employeeIds })
+  if (!roster.length) return []
+  const ctx = await loadContext({ companyId, from, to, people: roster }, deps)
+  const records = await AttendanceDayModel.find(
+    {
+      companyId,
+      employeeId: { $in: roster.map((p) => p.id) },
+      date: { $gte: from, $lte: to },
+    },
+    { employeeId: 1, date: 1, status: 1, flags: 1 }
+  ).lean()
+  const byKey = new Map(records.map((r) => [`${r.employeeId}|${r.date}`, r]))
+  const dates: PlainDate[] = []
+  for (let date = from; date <= to; date = addDays(date, 1)) dates.push(date)
+  return roster.map((person) => {
+    const full = ctx.people.get(person.id)!
+    return {
+      employeeId: person.id,
+      name: person.name,
+      days: dates.map((date) => {
+        const record = byKey.get(`${person.id}|${date}`)
+        const result = record ?? evaluate(ctx, person.id, date, [])
+        return {
+          date,
+          working:
+            ctx.calendar.workingDays.includes(weekdayOf(date)) &&
+            !holidayOn(ctx.calendar, date),
+          expected: isExpected(full, date),
+          status: (result.status ?? null) as AttendanceStatus | null,
+          flags: (result.flags ?? []) as AttendanceFlag[],
+        }
+      }),
+    }
+  })
+}

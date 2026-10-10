@@ -207,3 +207,27 @@ export async function listHistoryEntries(input: {
     reason: entry.reason ?? null,
   }))
 }
+
+/** The latest entries about one employee's records (all record types), newest first. */
+export async function recentEntriesAbout(input: {
+  companyId: string
+  subjectEmployeeId: string
+  limit: number
+}) {
+  const entries = await HistoryEntryModel.find({
+    companyId: input.companyId,
+    subjectEmployeeId: input.subjectEmployeeId,
+  })
+    .sort({ at: -1, _id: -1 })
+    .limit(input.limit)
+    .lean()
+  return entries.map((entry) => ({
+    action: entry.action,
+    entityType: entry.entityType as EntityType,
+    entityId: entry.entityId,
+    at: entry.at,
+    actorId: entry.actorId ?? null,
+    systemJob: entry.systemJob ?? null,
+    reason: entry.reason ?? null,
+  }))
+}

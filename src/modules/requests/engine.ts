@@ -73,6 +73,7 @@ type RequestDoc = {
   cancelledBy?: string | null
   cancelledAt?: Date | null
   createdAt?: Date
+  submittedAt?: Date | null
 }
 
 const toRecord = (doc: RequestDoc): RequestRecord => ({
@@ -649,6 +650,7 @@ export async function submitRequest(
         data: draft.data,
         status: draft.status,
         createdBy: auth.userId,
+        submittedAt: deps.clock.now(),
         ...(request.approved
           ? { decidedBy: auth.userId, decidedAt: deps.clock.now() }
           : {}),
@@ -756,6 +758,7 @@ async function toViews(auth: AuthContext, docs: RequestDoc[], deps: Deps) {
         approverPolicy: definition?.approverPolicy ?? null,
         createdBy: person(d.createdBy)!,
         createdAt: d.createdAt?.toISOString() ?? null,
+        submittedAt: (d.submittedAt ?? d.createdAt)?.toISOString() ?? null,
         decision: d.decidedBy
           ? {
               by: person(d.decidedBy)!,
@@ -1136,4 +1139,50 @@ export async function companyRequestTypes(
       enabled: !disabledRequestTypes.includes(t.key),
     }))
     .filter((t) => t.enabled || options.includeDisabled)
+}
+
+/** How long a pending request may wait before it is flagged on dashboards. */
+export const OVERDUE_AFTER_DAYS = 3
+
+/** Pending requests per type: how many, how many overdue, and the oldest (BE-13). */
+export async function pendingByType(companyId: string, deps: Deps) {
+  const docs = (
+    await RequestModel.find(
+      { companyId, status: "PENDING" },
+      { type: 1, createdAt: 1, submittedAt: 1 }
+    ).lean()
+  )
+    .map((doc) => ({
+      type: doc.type,
+      createdAt: doc.submittedAt ?? doc.createdAt,
+    }))
+    .sort(
+      (a, b) => (a.createdAt?.getTime() ?? 0) - (b.createdAt?.getTime() ?? 0)
+    )
+  const overdueBefore =
+    deps.clock.now().getTime() - OVERDUE_AFTER_DAYS * 86_400_000
+  const byType = new Map<
+    string,
+    { count: number; overdue: number; oldest: Date | null }
+  >()
+  for (const doc of docs) {
+    const entry = byType.get(doc.type) ?? { count: 0, overdue: 0, oldest: null }
+    entry.count += 1
+    if (doc.createdAt && doc.createdAt.getTime() < overdueBefore)
+      entry.overdue += 1
+    entry.oldest ??= doc.createdAt ?? null
+    byType.set(doc.type, entry)
+  }
+  return [...byType.entries()].map(([type, e]) => ({
+    type,
+    label: getRequestType(type)?.label ?? type,
+    count: e.count,
+    overdue: e.overdue,
+    oldestSubmittedAt: e.oldest?.toISOString() ?? null,
+    oldestAgeDays: e.oldest
+      ? Math.floor(
+          (deps.clock.now().getTime() - e.oldest.getTime()) / 86_400_000
+        )
+      : null,
+  }))
 }

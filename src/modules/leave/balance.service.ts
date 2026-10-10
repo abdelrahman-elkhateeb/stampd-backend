@@ -730,3 +730,54 @@ export async function openLeaveYear(
   }
   return created
 }
+
+/**
+ * Leave usage of a leave year per tracked type, company-wide (BE-13):
+ * entitled (entitlements + adjustments), used (dates passed), upcoming
+ * (approved, ahead) and pending, summed over every balance of the year.
+ */
+export async function leaveUsageByType(
+  input: { companyId: string; year?: number },
+  deps: Deps
+) {
+  const ctx = await companyContext(input.companyId, deps)
+  const year = input.year ?? leaveYearOf(ctx.today, ctx.startMonth)
+  const [types, entries] = await Promise.all([
+    LeaveTypeModel.find({
+      companyId: input.companyId,
+      tracksBalance: true,
+      archived: false,
+    })
+      .sort({ nameKey: 1 })
+      .lean(),
+    LeaveLedgerEntryModel.find(
+      { companyId: input.companyId, year },
+      { leaveTypeId: 1, type: 1, days: 1, breakdown: 1 }
+    ).lean(),
+  ])
+  return {
+    year,
+    items: types.map((type) => {
+      const summary = summarize(
+        entries
+          .filter((e) => e.leaveTypeId === type._id)
+          .map((e) => ({
+            type: e.type as LedgerEntryType,
+            days: e.days,
+            breakdown: e.breakdown?.map((d) => ({
+              date: d.date!,
+              days: d.days,
+            })),
+          })),
+        ctx.today
+      )
+      return {
+        leaveType: { id: type._id, name: type.name, icon: type.icon },
+        entitled: summary.entitlement + summary.adjustments,
+        used: summary.used,
+        upcoming: summary.upcoming,
+        pending: summary.pending,
+      }
+    }),
+  }
+}

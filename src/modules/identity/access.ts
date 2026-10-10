@@ -64,6 +64,9 @@ export const PERMISSIONS = {
   employeePhoto: { edit: { ...SELF, ADMIN: ["company"] } },
   /** Check-in/out, days and corrections (BE-07); corrections by Admin/HR only */
   attendance: { view: PERSONAL, create: SELF, edit: ADMIN_ONLY },
+  /** Dashboards (BE-13): the team one for Managers (and Admins), the company one for Admins */
+  teamDashboard: { view: { MANAGER: ["team"], ADMIN: ["company"] } },
+  companyDashboard: { view: ADMIN_ONLY },
   /** Missing Checkout / Absent list (BE-07) */
   attendanceExceptions: { view: ADMIN_ONLY },
   /** Leave balances (BE-08) and leave requests (BE-10); edit = cancel your own */

@@ -47,6 +47,8 @@ const requestSchema = new Schema(
     status: { type: String, enum: REQUEST_STATUSES, required: true },
     /** Who submitted it: the requester, or an Admin on their behalf */
     createdBy: { type: String, required: true },
+    /** When it was submitted (the app's clock; ages and "overdue" use it) */
+    submittedAt: { type: Date, default: null },
     decidedBy: { type: String, default: null },
     decidedAt: { type: Date, default: null },
     /** Rejection reason, or an optional comment on approval */

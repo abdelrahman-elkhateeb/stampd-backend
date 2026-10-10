@@ -2,7 +2,7 @@
 
 API for **Stampd**, the Employee Ops Platform (attendance, leave, requests and approvals for GCC teams).
 
-**Status:** BE-01 (foundation), BE-02 (authentication, company signup, tenant isolation) BE-03 (roles, data scopes, permission checks), BE-04 (change history), BE-05 (company settings, work calendar, holidays, image uploads) BE-06 (departments, employee management, offboarding) BE-07 (attendance: check-in/out, daily status, end-of-day close, corrections) BE-08 (leave types, policies, balance ledger) BE-09 (the request & approval engine) BE-10 (leave requests) BE-11 (WFH, attendance correction, permission and business trip requests) and BE-12 (company calendar and availability) are in place. Endpoints: health, signup, login, sessions, invitations, password reset, current user, change password, a record's history, settings, calendar, holidays, logo and photo uploads, departments, employees, attendance, leave types and balances, requests and approvals (table below). BE-03 adds no endpoints; it adds the checks every later endpoint uses. The other business endpoints arrive with BE-13 … BE-15.
+**Status:** BE-01 (foundation), BE-02 (authentication, company signup, tenant isolation) BE-03 (roles, data scopes, permission checks), BE-04 (change history), BE-05 (company settings, work calendar, holidays, image uploads) BE-06 (departments, employee management, offboarding) BE-07 (attendance: check-in/out, daily status, end-of-day close, corrections) BE-08 (leave types, policies, balance ledger) BE-09 (the request & approval engine) BE-10 (leave requests) BE-11 (WFH, attendance correction, permission and business trip requests) BE-12 (company calendar and availability) and BE-13 (dashboard summaries) are in place. Endpoints: health, signup, login, sessions, invitations, password reset, current user, change password, a record's history, settings, calendar, holidays, logo and photo uploads, departments, employees, attendance, leave types and balances, requests and approvals (table below). BE-03 adds no endpoints; it adds the checks every later endpoint uses. The other business endpoints arrive with BE-14 and BE-15.
 
 **Stack:** TypeScript · Express 5 · MongoDB · Mongoose · Zod. Those three (express, mongoose, zod) are the only runtime dependencies. Node 24, pnpm.
 
@@ -89,6 +89,9 @@ curl -s -X POST http://localhost:4000/auth/login -H 'content-type: application/j
 | GET                   | `/leave/employees/{id}/requests`                                                                                               | bearer                               | `200 { items, meta }`: leave history (self / team / company)                                                                   | BE-10  |
 | GET                   | `/calendar/events?from&to`                                                                                                     | bearer                               | `200 { from, to, events }`: approved leave, WFH, trips, permissions and holidays as the caller may see them (≤ 3 months)       | BE-12  |
 | GET                   | `/calendar/availability?from&to`                                                                                               | bearer                               | `200 { from, to, days }`: per-day out / WFH / in-office counts                                                                 | BE-12  |
+| GET                   | `/dashboard/employee`                                                                                                          | bearer                               | `200` my day, balances, pending requests, upcoming time off, recent activity                                                   | BE-13  |
+| GET                   | `/dashboard/manager`                                                                                                           | bearer, Manager or Admin             | `200` approvals waiting, team today (with names), team out next 14 days, team this month                                       | BE-13  |
+| GET                   | `/dashboard/admin`                                                                                                             | bearer, Admin                        | `200` company today, pending by type (overdue after 3 days), exceptions this month, leave usage, 30-day trend                  | BE-13  |
 
 Each ticket adds its endpoints to this table. The exact request and response bodies and error codes of every endpoint are on its Trello ticket (BE-02 for the identity endpoints, BE-04 for history, BE-05 for settings, holidays, calendar and uploads, BE-06 for departments and employees, BE-07 for attendance, BE-08 for leave types and balances, BE-09 for requests, BE-10 for leave requests, BE-11 for the other request types, BE-12 for the calendar).
 
@@ -158,7 +161,8 @@ src/
                             request-types.ts: WFH, correction,            (BE-11)
                             permission, business trip
     calendar/               calendar feed and availability (read-only)    (BE-12)
-    reporting/ notifications/                                             (BE-13 … BE-15)
+    reporting/              dashboard summaries (dashboard.service.ts)    (BE-13)
+    notifications/                                                        (BE-15)
   platform/storage/files.ts image uploads: type check, storage, signed URLs (BE-05)
   platform/jobs.ts          background jobs started by server.ts (BE-07)
   platform/db/append-only.ts  insert-only collections: history, leave ledger (BE-08)
@@ -302,6 +306,14 @@ How the engine behaves:
   - approved requests become attendance day effects (BE-07);
   - adding a holiday lists the approved requests on its dates (BE-05);
   - offboarding withdraws pending requests and cancels future approved ones, running each type's `onCancel` (BE-06).
+
+**Dashboards (BE-13).** `src/modules/reporting/dashboard.service.ts` builds one summary per role.
+
+- **One source of numbers:** every attendance figure comes from `dayStatuses()` (attendance), the same per-day statuses the attendance views show and BE-14's reports will use, so the numbers always agree.
+- **Today's buckets** (`present`, `late`, `absent`, `wfh`, `onLeave`, `businessTrip`, `notYetCheckedIn`) count the people expected today: tracked, joined, not past their last day, not invited. On a working day they add up to exactly that number.
+- **Before the day closes,** nobody is Absent: no check-in yet counts as `notYetCheckedIn`.
+- **Who sees what:** the manager summary covers the caller's direct reports only. The admin summary is Admins only.
+- **Speed:** with 300 employees, each summary answers in about 0.1 s in the tests.
 
 **Calendar (BE-12).** `src/modules/calendar/calendar.service.ts` reads approved requests (`APPROVED`, `CANCELLATION_REQUESTED`) and holidays for up to 3 months. Rejected, withdrawn and cancelled requests never appear, and attendance actuals (late, absent) are not part of the calendar.
 
@@ -533,7 +545,8 @@ Which calendar day an instant falls on depends on the company timezone: use `pla
   - requests (BE-09): every acceptance criterion with two test-only request types, including two simultaneous approvals, the sole-Admin exception, and the attendance, holiday and offboarding connections;
   - leave requests (BE-10): every acceptance criterion (2 of 3 days, overlap, holiday excluded, half day, no working days, 40 days back, On Leave in attendance and back after cancelling) and the colleague privacy rule;
   - workplace requests (BE-11): every acceptance criterion, including a permission excusing a 10:45 check-in, an Admin-approved correction with its history, and turning a type off;
-  - calendar (BE-12): every acceptance criterion, with two teams and two departments so each privacy boundary is checked.
+  - calendar (BE-12): every acceptance criterion, with two teams and two departments so each privacy boundary is checked;
+  - dashboards (BE-13): every acceptance criterion, including the buckets adding up, matching the attendance day view, and each summary under 1 s for 300 employees.
 
 ## CI
 
