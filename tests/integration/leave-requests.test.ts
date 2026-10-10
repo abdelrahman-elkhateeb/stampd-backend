@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { z } from "zod"
+
+import { registerRequestType } from "../../src/modules/requests/registry.ts"
 
 import { AttendanceDayModel } from "../../src/modules/attendance/attendance.model.ts"
 import { runAttendanceClose } from "../../src/modules/attendance/close-job.ts"
@@ -180,6 +183,87 @@ describe("balance and overlap", () => {
       reason: "Family matters",
     })
     expect(long.status).toBe(201)
+  })
+})
+
+describe("WFH and business trips on the same days", () => {
+  // Stand-ins until BE-11 registers the real WFH and BUSINESS_TRIP types.
+  let undo: (() => void)[] = []
+  beforeAll(() => {
+    undo = ["WFH", "BUSINESS_TRIP"].map((key) =>
+      registerRequestType({
+        key,
+        label: key,
+        approverPolicy: "MANAGER_WITH_ADMIN_FALLBACK",
+        dates: "RANGE",
+        times: "NONE",
+        reason: "OPTIONAL",
+        data: z.object({}),
+        colleagueVisibility: "HIDDEN",
+      })
+    )
+  })
+  afterAll(() => undo.forEach((u) => u()))
+
+  it("block the leave, pending or approved, with a message to withdraw or cancel them first", async () => {
+    const o = await org("Echo-2")
+    const wfh = await api.post<Detail>(
+      "/requests",
+      { type: "WFH", startDate: "2026-11-02", endDate: "2026-11-02" },
+      o.employee.token
+    )
+    expect(wfh.status).toBe(201)
+    const trip = await api.post<Detail>(
+      "/requests",
+      { type: "BUSINESS_TRIP", startDate: "2026-11-15", endDate: "2026-11-16" },
+      o.employee.token
+    )
+    await api.post(`/requests/${trip.body.id}/approve`, {}, o.manager.token)
+
+    const onWfh = await leave(o.employee, o.typeId("Annual"), {
+      startDate: "2026-11-01",
+      endDate: "2026-11-03",
+    })
+    expect(onWfh.status).toBe(409)
+    expect(onWfh.body).toMatchObject({
+      code: "REQUEST_OVERLAP",
+      message:
+        "You have a WFH request from 2026-11-02 to 2026-11-02 on these days; withdraw or cancel it first",
+    })
+    const onTrip = await leave(o.employee, o.typeId("Annual"), {
+      startDate: "2026-11-16",
+      endDate: "2026-11-17",
+    })
+    expect(onTrip.body).toMatchObject({
+      code: "REQUEST_OVERLAP",
+      message: expect.stringContaining("business trip"),
+    })
+
+    const shown = await preview(o.employee, {
+      leaveTypeId: o.typeId("Annual"),
+      startDate: "2026-11-01",
+      endDate: "2026-11-03",
+    })
+    expect(shown.body.problems).toEqual([
+      expect.objectContaining({
+        code: "REQUEST_OVERLAP",
+        message: expect.stringContaining("WFH"),
+      }),
+    ])
+    expect(shown.body.conflicts).toEqual([
+      expect.objectContaining({ requestId: wfh.body.id, type: "WFH" }),
+    ])
+
+    // Once the WFH request is withdrawn, the leave goes through.
+    await api.post(`/requests/${wfh.body.id}/withdraw`, {}, o.employee.token)
+    expect(
+      (
+        await leave(o.employee, o.typeId("Annual"), {
+          startDate: "2026-11-01",
+          endDate: "2026-11-03",
+        })
+      ).status
+    ).toBe(201)
   })
 })
 

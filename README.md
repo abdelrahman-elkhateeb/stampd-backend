@@ -308,10 +308,8 @@ How the engine behaves:
   - more than 30 days in the past (Admins recording it on someone's behalf are exempt);
   - beyond the end of the next leave year;
   - a range across two leave years (`CROSSES_LEAVE_YEAR`: split it);
-  - overlapping the requester's own leave (`409 REQUEST_OVERLAP`);
+  - overlapping the requester's own leave, or their pending/approved WFH days or business trips (`409 REQUEST_OVERLAP`, with a message to withdraw or cancel that request first; BE-11 applies the same rule the other way round);
   - not enough balance (`409 INSUFFICIENT_BALANCE`, checked under the balance lock).
-
-  The requester's WFH and business trips on those days are flagged by the preview, not refused.
 
 - **Effects:** submit → reserve; approve → deduct per date, and stored attendance days in the range are recalculated (e.g. a past Absent becomes On Leave); reject or withdraw → release; cancel approved → restore the days not taken yet, and recalculate attendance.
 - **Preview** (`POST /leave/requests/preview`) runs the same rules without saving and lists every problem. It also shows who else is off, as the caller may see them: an Employee sees same-department colleagues by name only (BE-03).

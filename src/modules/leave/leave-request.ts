@@ -41,13 +41,17 @@ import { getLeaveType, type LeaveTypeView } from "./leave-types.service.ts"
 /**
  * The Leave request type (Trello BE-10), registered on the request engine
  * (BE-09). Its rules: working days only (weekends and holidays excluded), half
- * days on the first/last day, no overlap with the requester's other leave,
- * date limits, and balance effects for every step (BE-08).
+ * days on the first/last day, no overlap with the requester's other leave or
+ * their WFH days and business trips, date limits, and balance effects for
+ * every step (BE-08).
  */
 export const LEAVE = "LEAVE"
 
 export const HALVES = ["MORNING", "AFTERNOON"] as const
 export type Half = (typeof HALVES)[number]
+
+/** Request types leave may not overlap (pending or approved): WFH and business trips (BE-11). */
+export const BLOCKING_TYPES = ["WFH", "BUSINESS_TRIP"]
 
 /** How far back an employee may request leave (sick/emergency after the fact). */
 export const MAX_DAYS_IN_PAST = 30
@@ -136,7 +140,7 @@ export type LeaveCheck = {
   year: number | null
   days: LeaveDays | null
   problems: LeaveProblem[]
-  /** the requester's WFH or business trips on the same days (flagged, not refused) */
+  /** the requester's WFH or business trips on the same days (they block the leave) */
   conflicts: RequestRecord[]
 }
 
@@ -296,7 +300,18 @@ export async function checkLeave(
       message: `Overlaps your leave from ${otherLeave.startDate} to ${otherLeave.endDate}`,
     })
   }
-  result.conflicts = overlapping.filter((r) => r.type !== LEAVE)
+  // Leave can't share days with a WFH day or business trip (decision
+  // 2026-10-10; BE-11 applies the same rule the other way round).
+  result.conflicts = overlapping.filter((r) => BLOCKING_TYPES.includes(r.type))
+  for (const other of result.conflicts) {
+    const label = other.type === "WFH" ? "WFH request" : "business trip"
+    problems.push({
+      status: 409,
+      code: "REQUEST_OVERLAP",
+      field: null,
+      message: `You have a ${label} from ${other.startDate} to ${other.endDate} on these days; withdraw or cancel it first`,
+    })
+  }
 
   if (
     input.withBalance &&
@@ -346,8 +361,8 @@ function refuse(problems: LeaveProblem[]): void {
 
 /**
  * The form's preview (BE-10): days counted and excluded, the balance before
- * and after, every problem a submission would hit, the requester's WFH/trips
- * on those days, and who else is off — as the caller may see them (BE-03:
+ * and after, every problem a submission would hit (including the requester's
+ * WFH/trips on those days, which block it), and who else is off — as the caller may see them (BE-03:
  * an Employee sees same-department colleagues by name only).
  */
 export async function previewLeave(
