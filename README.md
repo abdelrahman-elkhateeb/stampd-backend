@@ -2,7 +2,7 @@
 
 API for **Stampd**, the Employee Ops Platform (attendance, leave, requests and approvals for GCC teams).
 
-**Status:** BE-01 (foundation), BE-02 (authentication, company signup, tenant isolation) BE-03 (roles, data scopes, permission checks), BE-04 (change history), BE-05 (company settings, work calendar, holidays, image uploads) BE-06 (departments, employee management, offboarding) BE-07 (attendance: check-in/out, daily status, end-of-day close, corrections) BE-08 (leave types, policies, balance ledger) BE-09 (the request & approval engine) and BE-10 (leave requests) are in place. Endpoints: health, signup, login, sessions, invitations, password reset, current user, change password, a record's history, settings, calendar, holidays, logo and photo uploads, departments, employees, attendance, leave types and balances, requests and approvals (table below). BE-03 adds no endpoints; it adds the checks every later endpoint uses. The other business endpoints arrive with BE-11 … BE-15; BE-11 registers the other request types.
+**Status:** BE-01 (foundation), BE-02 (authentication, company signup, tenant isolation) BE-03 (roles, data scopes, permission checks), BE-04 (change history), BE-05 (company settings, work calendar, holidays, image uploads) BE-06 (departments, employee management, offboarding) BE-07 (attendance: check-in/out, daily status, end-of-day close, corrections) BE-08 (leave types, policies, balance ledger) BE-09 (the request & approval engine) BE-10 (leave requests) and BE-11 (WFH, attendance correction, permission and business trip requests) are in place. Endpoints: health, signup, login, sessions, invitations, password reset, current user, change password, a record's history, settings, calendar, holidays, logo and photo uploads, departments, employees, attendance, leave types and balances, requests and approvals (table below). BE-03 adds no endpoints; it adds the checks every later endpoint uses. The other business endpoints arrive with BE-12 … BE-15.
 
 **Stack:** TypeScript · Express 5 · MongoDB · Mongoose · Zod. Those three (express, mongoose, zod) are the only runtime dependencies. Node 24, pnpm.
 
@@ -152,7 +152,9 @@ src/
                             balance.service.ts), leave-year rollover job
                             leave-request.ts: the LEAVE request type       (BE-10)
     requests/               request engine (engine.ts), type registry       (BE-09)
-                            (registry.ts); types come from BE-10/BE-11
+                            (registry.ts); Leave lives in leave/ (BE-10)
+                            request-types.ts: WFH, correction,            (BE-11)
+                            permission, business trip
     reporting/ notifications/                                             (BE-13 … BE-15)
   platform/storage/files.ts image uploads: type check, storage, signed URLs (BE-05)
   platform/jobs.ts          background jobs started by server.ts (BE-07)
@@ -297,6 +299,20 @@ How the engine behaves:
   - approved requests become attendance day effects (BE-07);
   - adding a holiday lists the approved requests on its dates (BE-05);
   - offboarding withdraws pending requests and cancels future approved ones, running each type's `onCancel` (BE-06).
+
+**Workplace requests (BE-11).** Four types in `src/modules/requests/request-types.ts`, registered with no engine changes:
+
+| Key                     | Dates / times                                                                                 | Approver        | Effect                                                                                                                  |
+| ----------------------- | --------------------------------------------------------------------------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `WFH`                   | range                                                                                         | manager → Admin | days read `WFH` when checked in; an approved WFH day closing without a check-in is `ABSENT` with flag `WFH_NO_CHECK_IN` |
+| `ATTENDANCE_CORRECTION` | one past day (≤ 30 days back), `data.checkInTime` / `checkOutTime` (`HH:mm`), reason required | **Admin only**  | on approval, the BE-07 correction service applies it (source `APPROVAL`, history keeps the `requestId`)                 |
+| `PERMISSION`            | one working day, `startTime`–`endTime` within working hours                                   | manager → Admin | arriving before the permission's end isn't Late                                                                         |
+| `BUSINESS_TRIP`         | range, `data.destination`, `data.purpose`                                                     | manager → Admin | days read `BUSINESS_TRIP`, never Absent                                                                                 |
+
+- **Never on the same days:** leave and WFH or business trips, in either direction (`409 REQUEST_OVERLAP`, decision 2026-10-10); also two WFH requests.
+- **Attendance:** approving or cancelling a WFH, permission or trip recalculates the stored attendance days it covers.
+- **Turning types off:** a company turns types off with `disabledRequestTypes` in `PATCH /company/settings`. Turned-off types disappear from `GET /requests/types` (Admins can pass `?includeDisabled=true`), and new requests of that type get `409 REQUEST_TYPE_DISABLED`. Existing requests stay visible.
+- **Form fields:** `GET /requests/types` describes each type's own fields for forms (`fields: [{ name, kind, required, … }]`).
 
 **Leave requests (BE-10).** Leave is the request type `LEAVE` on the engine (`src/modules/leave/leave-request.ts`), submitted with `POST /requests` and `data: { leaveTypeId, firstDayHalf?, lastDayHalf? }`.
 
@@ -500,7 +516,8 @@ Which calendar day an instant falls on depends on the company timezone: use `pla
   - attendance (BE-07): every acceptance criterion, with a clock the tests move to exact local times (09:07 vs 09:12, midnight in Dubai vs Bogotá, parallel check-ins);
   - leave (BE-08): every acceptance criterion, including six parallel requests against one balance (fails without the lock);
   - requests (BE-09): every acceptance criterion with two test-only request types, including two simultaneous approvals, the sole-Admin exception, and the attendance, holiday and offboarding connections;
-  - leave requests (BE-10): every acceptance criterion (2 of 3 days, overlap, holiday excluded, half day, no working days, 40 days back, On Leave in attendance and back after cancelling) and the colleague privacy rule.
+  - leave requests (BE-10): every acceptance criterion (2 of 3 days, overlap, holiday excluded, half day, no working days, 40 days back, On Leave in attendance and back after cancelling) and the colleague privacy rule;
+  - workplace requests (BE-11): every acceptance criterion, including a permission excusing a 10:45 check-in, an Admin-approved correction with its history, and turning a type off.
 
 ## CI
 

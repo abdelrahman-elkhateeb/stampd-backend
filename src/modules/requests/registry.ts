@@ -36,6 +36,16 @@ export type HookContext = {
   deps: { clock: Clock }
 }
 
+/** How the frontend renders one of a type's own fields (`data.<name>`). */
+export type FieldMeta = {
+  name: string
+  /** text, a "HH:mm" time, one of `options`, or a leave type id (GET /leave/types) */
+  kind: "text" | "time" | "choice" | "leaveType"
+  required: boolean
+  maxLength?: number
+  options?: string[]
+}
+
 export type RequestTypeDefinition = {
   /** Stable key stored on requests, e.g. "LEAVE" */
   key: string
@@ -53,6 +63,8 @@ export type RequestTypeDefinition = {
   reason: "OPTIONAL" | "REQUIRED"
   /** The type's own fields (`data`), validated with Zod: errors come back as data.<field> */
   data: z.ZodType<Record<string, unknown>>
+  /** The same fields described for forms (GET /requests/types) */
+  fields?: FieldMeta[]
   /**
    * How colleagues may see it in "who is out" views (BE-03): as "Out"
    * (leave), "WFH", or not at all (trips, permissions, corrections).

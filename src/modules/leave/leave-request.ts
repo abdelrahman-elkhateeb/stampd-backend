@@ -532,6 +532,21 @@ export function registerLeaveRequestType(): void {
     // Required or not per leave type: checked in validate().
     reason: "OPTIONAL",
     data: leaveData,
+    fields: [
+      { name: "leaveTypeId", kind: "leaveType", required: true },
+      {
+        name: "firstDayHalf",
+        kind: "choice",
+        required: false,
+        options: [...HALVES],
+      },
+      {
+        name: "lastDayHalf",
+        kind: "choice",
+        required: false,
+        options: ["MORNING"],
+      },
+    ],
     colleagueVisibility: "OUT",
     dayEffect: (request, date) => ({
       kind: "LEAVE",

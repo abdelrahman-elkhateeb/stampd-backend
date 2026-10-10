@@ -119,6 +119,8 @@ const companySchema = new Schema(
     },
     /** The logo image (StoredFile id), or null */
     logoFileId: { type: String, default: null },
+    /** Request types (BE-09 keys) the company turned off; all are on by default (BE-11) */
+    disabledRequestTypes: { type: [String], default: () => [] },
   },
   baseSchemaOptions
 )

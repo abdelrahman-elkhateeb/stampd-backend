@@ -15,6 +15,7 @@ import type { AppModule } from "../module.ts"
 import {
   approveRequest,
   cancelRequest,
+  companyRequestTypes,
   decideCancellation,
   getRequestDetail,
   listApprovals,
@@ -24,8 +25,11 @@ import {
   submitRequest,
   withdrawRequest,
 } from "./engine.ts"
-import { listRequestTypes } from "./registry.ts"
+import { registerWorkplaceRequestTypes } from "./request-types.ts"
 import { REQUEST_STATUSES } from "./request.model.ts"
+
+// WFH, Attendance Correction, Permission and Business Trip (BE-11).
+registerWorkplaceRequestTypes()
 
 const plainDate = z.string().refine(isPlainDate, "must be a date (YYYY-MM-DD)")
 const text = (max: number) => z.string().max(max).nullable().optional()
@@ -79,20 +83,41 @@ export const requestsModule: AppModule = {
     router.get(
       "/requests/types",
       auth,
-      route({}, async () => ({
-        status: 200,
-        body: {
-          items: listRequestTypes().map((t) => ({
-            key: t.key,
-            label: t.label,
-            approverPolicy: t.approverPolicy,
-            dates: t.dates,
-            times: t.times,
-            reason: t.reason,
-            colleagueVisibility: t.colleagueVisibility,
-          })),
+      route(
+        {
+          query: z.object({
+            includeDisabled: z.enum(["true", "false"]).default("false"),
+          }),
         },
-      }))
+        async ({ query, req }) => {
+          const callerAuth = getAuth(req)
+          const types = await companyRequestTypes(
+            callerAuth.companyId,
+            {
+              // Turned-off types are an Admin concern (settings screen).
+              includeDisabled:
+                callerAuth.role === "ADMIN" && query.includeDisabled === "true",
+            },
+            deps
+          )
+          return {
+            status: 200,
+            body: {
+              items: types.map(({ definition: t, enabled }) => ({
+                key: t.key,
+                label: t.label,
+                enabled,
+                approverPolicy: t.approverPolicy,
+                dates: t.dates,
+                times: t.times,
+                reason: t.reason,
+                colleagueVisibility: t.colleagueVisibility,
+                fields: t.fields ?? [],
+              })),
+            },
+          }
+        }
+      )
     )
     router.post(
       "/requests",

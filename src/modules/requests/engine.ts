@@ -25,7 +25,10 @@ import {
   getEmployeeNames,
   getReportingLine,
 } from "../organization/organization.service.ts"
-import { registerAffectedRequestFinder } from "../organization/settings.service.ts"
+import {
+  getCompanySettings,
+  registerAffectedRequestFinder,
+} from "../organization/settings.service.ts"
 import {
   getRequestType,
   listRequestTypes,
@@ -571,6 +574,16 @@ export async function submitRequest(
 ): Promise<RequestRecord> {
   const { auth, request } = input
   const definition = requireType(request.type)
+  const { disabledRequestTypes } = await getCompanySettings(
+    auth.companyId,
+    deps
+  )
+  if (disabledRequestTypes.includes(definition.key)) {
+    throw apiErrors.conflictWith(
+      "REQUEST_TYPE_DISABLED",
+      `${definition.label} requests are turned off for this company`
+    )
+  }
   const requesterId = request.employeeId ?? auth.userId
   const onBehalf = requesterId !== auth.userId
   if ((onBehalf || request.approved) && auth.role !== "ADMIN") {
@@ -1106,3 +1119,21 @@ export function integrateRequestEngine(): void {
 }
 
 integrateRequestEngine()
+
+/**
+ * The registered types for the company: those it turned off are left out,
+ * unless `includeDisabled` (Admins, for the settings screen).
+ */
+export async function companyRequestTypes(
+  companyId: string,
+  options: { includeDisabled: boolean },
+  deps: Deps
+) {
+  const { disabledRequestTypes } = await getCompanySettings(companyId, deps)
+  return listRequestTypes()
+    .map((t) => ({
+      definition: t,
+      enabled: !disabledRequestTypes.includes(t.key),
+    }))
+    .filter((t) => t.enabled || options.includeDisabled)
+}

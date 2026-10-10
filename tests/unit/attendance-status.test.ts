@@ -50,16 +50,32 @@ describe("late", () => {
     ).toBe(false)
   })
 
-  it("is excused by an approved permission or half day", () => {
+  it("is excused by a half day of leave", () => {
     const late = { ...base, sessions: [session("11:00", "17:00")] }
-    expect(
-      computeDay({ ...late, effects: [{ kind: "PERMISSION", fullDay: false }] })
-        .status
-    ).toBe("PRESENT")
     expect(
       computeDay({ ...late, effects: [{ kind: "LEAVE", fullDay: false }] })
         .status
     ).toBe("PRESENT")
+  })
+
+  it("is excused by a permission until its end: 09:00–11:00 covers 10:45, not 11:30 (BE-11 AC)", () => {
+    const permission = [
+      { kind: "PERMISSION" as const, fullDay: false, until: "11:00" },
+    ]
+    expect(
+      computeDay({
+        ...base,
+        sessions: [session("10:45", null)],
+        effects: permission,
+      }).status
+    ).toBe("PRESENT")
+    expect(
+      computeDay({
+        ...base,
+        sessions: [session("11:30", null)],
+        effects: permission,
+      }).status
+    ).toBe("LATE")
   })
 })
 
@@ -101,10 +117,9 @@ describe("no check-in", () => {
     ).toBeNull()
   })
 
-  it("shows approved leave, WFH and business trips instead", () => {
+  it("shows approved leave and business trips instead", () => {
     for (const [kind, status] of [
       ["LEAVE", "ON_LEAVE"],
-      ["WFH", "WFH"],
       ["BUSINESS_TRIP", "BUSINESS_TRIP"],
     ] as const) {
       expect(
@@ -115,6 +130,29 @@ describe("no check-in", () => {
         }).status
       ).toBe(status)
     }
+  })
+})
+
+describe("WFH", () => {
+  const wfh = [{ kind: "WFH" as const, fullDay: true }]
+
+  it("is the status whenever the employee checks in, never Present or Late (BE-11 AC)", () => {
+    expect(
+      computeDay({
+        ...base,
+        sessions: [session("11:30", "17:00")],
+        effects: wfh,
+        dayOver: true,
+      }).status
+    ).toBe("WFH")
+  })
+
+  it("without a check-in: WFH during the day, Absent flagged WFH_NO_CHECK_IN once it closes (BE-11 AC)", () => {
+    expect(computeDay({ ...base, effects: wfh }).status).toBe("WFH")
+    expect(computeDay({ ...base, effects: wfh, dayOver: true })).toMatchObject({
+      status: "ABSENT",
+      flags: ["WFH_NO_CHECK_IN"],
+    })
   })
 })
 

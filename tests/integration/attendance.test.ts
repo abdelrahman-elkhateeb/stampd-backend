@@ -281,7 +281,8 @@ describe("end-of-day close", () => {
     )
   })
 
-  it("never marks Absent a day covered by approved leave, WFH or a trip", async () => {
+  // An approved WFH day without a check-in IS Absent (BE-11): see workplace-requests.test.ts.
+  it("never marks Absent a day covered by approved leave or a business trip", async () => {
     travelTo("2026-10-14T04:00:00Z")
     const o = await org("India")
     unregister = registerDayEffectsProvider(async ({ companyId }) =>
@@ -290,7 +291,7 @@ describe("end-of-day close", () => {
             {
               employeeId: o.colleague.id,
               date: "2026-10-14",
-              kind: "WFH",
+              kind: "BUSINESS_TRIP",
               fullDay: true,
             },
           ]
@@ -310,7 +311,7 @@ describe("end-of-day close", () => {
       `/attendance/days?date=2026-10-14&employeeId=${o.colleague.id}`,
       await relogin(o.admin, o.companyId)
     )
-    expect(view.body.items[0]!.days[0]!.status).toBe("WFH")
+    expect(view.body.items[0]!.days[0]!.status).toBe("BUSINESS_TRIP")
   })
 
   it("doesn't expect attendance before the joining date or for untracked employees", async () => {

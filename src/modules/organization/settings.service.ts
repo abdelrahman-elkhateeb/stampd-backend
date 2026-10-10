@@ -36,6 +36,8 @@ export type CompanySettings = {
   workEndTime: string
   lateGraceMinutes: number
   leaveYearStartMonth: number
+  /** Request type keys turned off (BE-11); new requests of these types are refused */
+  disabledRequestTypes: string[]
 }
 
 export type SettingsChange = Partial<
@@ -53,6 +55,7 @@ const TRACKED = [
   "lateGraceMinutes",
   "leaveYearStartMonth",
   "logoFileId",
+  "disabledRequestTypes",
 ] as const
 
 type CompanyDoc = NonNullable<Awaited<ReturnType<typeof loadCompany>>>
@@ -79,6 +82,7 @@ function toSettings(company: CompanyDoc, now: Date): CompanySettings {
       company.lateGraceMinutes ?? DEFAULT_SETTINGS.lateGraceMinutes,
     leaveYearStartMonth:
       company.leaveYearStartMonth ?? DEFAULT_SETTINGS.leaveYearStartMonth,
+    disabledRequestTypes: [...(company.disabledRequestTypes ?? [])].sort(),
   }
 }
 

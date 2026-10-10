@@ -13,15 +13,21 @@ import type { AttendanceFlag, AttendanceStatus } from "./attendance.model.ts"
  *     WORKED_DURING_TIME_OFF.
  *  3. Checked in: MISSING_CHECKOUT when the day is over with a session still
  *     open; otherwise LATE when the first check-in is after work start +
- *     grace (unless an approved permission or half day covers it), else
- *     PRESENT.
+ *     grace (unless a half day of leave covers it, or an approved permission
+ *     runs until later), else PRESENT. An approved WFH day without a
+ *     check-in is ABSENT once over, flagged WFH_NO_CHECK_IN.
  *  4. No check-in: ABSENT once the day is over, if attendance was expected;
  *     null (nothing to show yet, or not expected) otherwise.
  */
 export type DayEffectKind = "LEAVE" | "WFH" | "BUSINESS_TRIP" | "PERMISSION"
 
 /** An approved request that touches the day (from leave/requests, BE-10/BE-11). */
-export type DayEffect = { kind: DayEffectKind; fullDay: boolean }
+export type DayEffect = {
+  kind: DayEffectKind
+  fullDay: boolean
+  /** PERMISSION: arriving up to this time ("HH:mm") isn't late (BE-11) */
+  until?: string
+}
 
 export type SessionTimes = {
   checkInAt: Date
@@ -66,11 +72,15 @@ export function isLate(
     timezone: string
     workStartTime: string
     lateGraceMinutes: number
-  }
+  },
+  /** an approved permission's end time: arriving before it is excused */
+  excusedUntil?: string
 ): boolean {
   const limit =
-    (minutesOfLocalTime(settings.workStartTime) + settings.lateGraceMinutes) *
-    60
+    Math.max(
+      minutesOfLocalTime(settings.workStartTime) + settings.lateGraceMinutes,
+      excusedUntil ? minutesOfLocalTime(excusedUntil) : 0
+    ) * 60
   return secondsIntoDay(checkInAt, settings.timezone) > limit
 }
 
@@ -106,6 +116,18 @@ export function computeDay(input: DayInput): DayResult {
 
   const fullDay = input.effects.find((e) => e.fullDay && FULL_DAY[e.kind])
   if (fullDay) {
+    // WFH still means checking in (BE-11): no check-in by the end of the day
+    // is Absent, flagged so it reads as "WFH, no check-in".
+    if (
+      fullDay.kind === "WFH" &&
+      !checkedIn &&
+      input.dayOver &&
+      input.expected
+    ) {
+      result.status = "ABSENT"
+      result.flags.push("WFH_NO_CHECK_IN")
+      return result
+    }
     result.status = FULL_DAY[fullDay.kind]!
     if (checkedIn && fullDay.kind !== "WFH") {
       result.flags.push("WORKED_DURING_TIME_OFF")
@@ -118,11 +140,20 @@ export function computeDay(input: DayInput): DayResult {
     if (input.dayOver && stillOpen) {
       result.status = "MISSING_CHECKOUT"
     } else {
-      const excused = input.effects.some(
-        (e) => e.kind === "PERMISSION" || !e.fullDay
+      // A half day of leave excuses the day; a permission excuses arriving
+      // until its end time.
+      const halfDayLeave = input.effects.some(
+        (e) => !e.fullDay && e.kind !== "PERMISSION"
       )
+      const permitted = input.effects
+        .filter((e) => e.kind === "PERMISSION" && e.until)
+        .map((e) => e.until!)
+        .sort()
+        .at(-1)
       result.status =
-        !excused && isLate(sessions[0]!.checkInAt, input) ? "LATE" : "PRESENT"
+        !halfDayLeave && isLate(sessions[0]!.checkInAt, input, permitted)
+          ? "LATE"
+          : "PRESENT"
     }
     return result
   }

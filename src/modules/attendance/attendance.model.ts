@@ -40,6 +40,8 @@ export const ATTENDANCE_FLAGS = [
   "WORKED_DURING_TIME_OFF",
   /** a correction changed the day */
   "CORRECTED",
+  /** an approved WFH day ended without a check-in (BE-11) */
+  "WFH_NO_CHECK_IN",
 ] as const
 export type AttendanceFlag = (typeof ATTENDANCE_FLAGS)[number]
 

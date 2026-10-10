@@ -51,3 +51,22 @@ describe("plainDateInZone", () => {
     expect(isTimeZone("Mars/Olympus")).toBe(false)
   })
 })
+
+describe("instantAt", () => {
+  it("turns a company's local date and time into the UTC instant", async () => {
+    const { instantAt } = await import("../../src/platform/time/time.ts")
+    expect(instantAt("2026-10-12", "08:30", "Asia/Dubai").toISOString()).toBe(
+      "2026-10-12T04:30:00.000Z"
+    )
+    expect(
+      instantAt("2026-10-12", "08:30", "America/Bogota").toISOString()
+    ).toBe("2026-10-12T13:30:00.000Z")
+    // Across a daylight-saving change (London: BST until 25 Oct 2026).
+    expect(
+      instantAt("2026-10-24", "09:00", "Europe/London").toISOString()
+    ).toBe("2026-10-24T08:00:00.000Z")
+    expect(
+      instantAt("2026-10-26", "09:00", "Europe/London").toISOString()
+    ).toBe("2026-10-26T09:00:00.000Z")
+  })
+})

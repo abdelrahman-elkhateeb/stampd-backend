@@ -1,7 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { z } from "zod"
-
-import { registerRequestType } from "../../src/modules/requests/registry.ts"
+import { describe, expect, it } from "vitest"
 
 import { AttendanceDayModel } from "../../src/modules/attendance/attendance.model.ts"
 import { runAttendanceClose } from "../../src/modules/attendance/close-job.ts"
@@ -187,24 +184,6 @@ describe("balance and overlap", () => {
 })
 
 describe("WFH and business trips on the same days", () => {
-  // Stand-ins until BE-11 registers the real WFH and BUSINESS_TRIP types.
-  let undo: (() => void)[] = []
-  beforeAll(() => {
-    undo = ["WFH", "BUSINESS_TRIP"].map((key) =>
-      registerRequestType({
-        key,
-        label: key,
-        approverPolicy: "MANAGER_WITH_ADMIN_FALLBACK",
-        dates: "RANGE",
-        times: "NONE",
-        reason: "OPTIONAL",
-        data: z.object({}),
-        colleagueVisibility: "HIDDEN",
-      })
-    )
-  })
-  afterAll(() => undo.forEach((u) => u()))
-
   it("block the leave, pending or approved, with a message to withdraw or cancel them first", async () => {
     const o = await org("Echo-2")
     const wfh = await api.post<Detail>(
@@ -215,7 +194,12 @@ describe("WFH and business trips on the same days", () => {
     expect(wfh.status).toBe(201)
     const trip = await api.post<Detail>(
       "/requests",
-      { type: "BUSINESS_TRIP", startDate: "2026-11-15", endDate: "2026-11-16" },
+      {
+        type: "BUSINESS_TRIP",
+        startDate: "2026-11-15",
+        endDate: "2026-11-16",
+        data: { destination: "Riyadh", purpose: "Client visit" },
+      },
       o.employee.token
     )
     await api.post(`/requests/${trip.body.id}/approve`, {}, o.manager.token)

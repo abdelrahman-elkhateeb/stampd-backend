@@ -58,6 +58,12 @@ const settingsBody = z.object({
   workEndTime: localTime.optional(),
   lateGraceMinutes: z.number().int().min(0).max(240).optional(),
   leaveYearStartMonth: z.number().int().min(1).max(12).optional(),
+  /** Request type keys to turn off (BE-11), e.g. ["BUSINESS_TRIP"]; [] turns all on */
+  disabledRequestTypes: z
+    .array(z.string().regex(/^[A-Z_]{1,50}$/, "a request type key"))
+    .max(20)
+    .transform((keys) => [...new Set(keys)].sort())
+    .optional(),
 })
 
 const holidayBody = z.object({

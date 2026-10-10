@@ -40,6 +40,8 @@ export type ErrorCode =
   | "REQUEST_STARTED"
   // BE-10: leave requests
   | "REQUEST_OVERLAP"
+  // BE-11: request types
+  | "REQUEST_TYPE_DISABLED"
 
 export const FIELD_ERROR_CODES = [
   "REQUIRED",

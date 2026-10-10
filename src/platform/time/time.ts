@@ -89,3 +89,46 @@ export function minutesOfLocalTime(time: string): number {
   const [hours, minutes] = time.split(":").map(Number) as [number, number]
   return hours * 60 + minutes
 }
+
+/**
+ * The instant of a local date and "HH:mm" time in a timezone, e.g. 08:30 on
+ * 2026-10-12 in Asia/Dubai → 2026-10-12T04:30:00Z. (For a time that doesn't
+ * exist or happens twice because of daylight saving, the nearest valid
+ * instant is returned.)
+ */
+export function instantAt(
+  date: PlainDate,
+  time: string,
+  timeZone: string
+): Date {
+  const [y, m, d] = date.split("-").map(Number) as [number, number, number]
+  const [hours, minutes] = time.split(":").map(Number) as [number, number]
+  const wall = Date.UTC(y, m - 1, d, hours, minutes)
+  // How far the zone's wall clock is ahead of UTC at a given instant.
+  const offsetAt = (instant: number) => {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(new Date(instant))
+    const get = (type: string) =>
+      Number(parts.find((p) => p.type === type)?.value)
+    return (
+      Date.UTC(
+        get("year"),
+        get("month") - 1,
+        get("day"),
+        get("hour"),
+        get("minute"),
+        get("second")
+      ) - instant
+    )
+  }
+  const first = wall - offsetAt(wall)
+  return new Date(wall - offsetAt(first))
+}

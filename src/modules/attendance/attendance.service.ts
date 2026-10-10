@@ -656,6 +656,8 @@ export async function correctAttendance(
     operation: CorrectionOperation
     reason: string | null | undefined
     actor: HistoryActor
+    /** The approved correction request (BE-11), kept in the history entry */
+    requestId?: string
   },
   deps: Deps
 ) {
@@ -749,7 +751,10 @@ export async function correctAttendance(
         subjectEmployeeId: employeeId,
         actor: input.actor,
         before: daySnapshot(sessions, beforeDay),
-        after: daySnapshot(after.sessions, after.result),
+        after: {
+          ...daySnapshot(after.sessions, after.result),
+          ...(input.requestId ? { requestId: input.requestId } : {}),
+        },
         reason: input.reason,
       },
       deps

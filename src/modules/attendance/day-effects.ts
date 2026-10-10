@@ -41,7 +41,11 @@ export async function loadDayEffects(input: {
     const key = `${entry.employeeId}|${entry.date}`
     byKey.set(key, [
       ...(byKey.get(key) ?? []),
-      { kind: entry.kind, fullDay: entry.fullDay },
+      {
+        kind: entry.kind,
+        fullDay: entry.fullDay,
+        ...(entry.until ? { until: entry.until } : {}),
+      },
     ])
   }
   return byKey

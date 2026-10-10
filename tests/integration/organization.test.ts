@@ -47,6 +47,7 @@ describe("company settings", () => {
         workEndTime: "17:00",
         lateGraceMinutes: 0,
         leaveYearStartMonth: 1,
+        disabledRequestTypes: [],
       })
     }
   })
