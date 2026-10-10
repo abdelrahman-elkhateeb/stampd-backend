@@ -266,19 +266,22 @@ export type RosterEntry = {
   managerId: string | null
   tracksAttendance: boolean
   joiningDate: string | null
+  employeeCode: string | null
 }
 
-/** Employees of a company, optionally only some ids or one department, by name. */
+/** Employees of a company, optionally only some ids, one department or one manager's reports, by name. */
 export async function getRoster(input: {
   companyId: string
   ids?: string[]
   departmentId?: string
+  managerId?: string
 }): Promise<RosterEntry[]> {
   const employees = await EmployeeModel.find(
     {
       companyId: input.companyId,
       ...(input.ids ? { _id: { $in: input.ids } } : {}),
       ...(input.departmentId ? { departmentId: input.departmentId } : {}),
+      ...(input.managerId ? { managerId: input.managerId } : {}),
     },
     {
       name: 1,
@@ -286,6 +289,7 @@ export async function getRoster(input: {
       managerId: 1,
       tracksAttendance: 1,
       joiningDate: 1,
+      employeeCode: 1,
     }
   )
     .sort({ name: 1, _id: 1 })
@@ -297,5 +301,6 @@ export async function getRoster(input: {
     managerId: e.managerId ?? null,
     tracksAttendance: e.tracksAttendance ?? true,
     joiningDate: e.joiningDate ?? null,
+    employeeCode: e.employeeCode ?? null,
   }))
 }

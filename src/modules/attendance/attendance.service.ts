@@ -856,6 +856,10 @@ export type PersonDays = {
     expected: boolean
     status: AttendanceStatus | null
     flags: AttendanceFlag[]
+    firstCheckInAt: Date | null
+    lastCheckOutAt: Date | null
+    /** closed sessions only (an open session doesn't count yet) */
+    workedMinutes: number
   }[]
 }
 
@@ -883,7 +887,15 @@ export async function dayStatuses(
       employeeId: { $in: roster.map((p) => p.id) },
       date: { $gte: from, $lte: to },
     },
-    { employeeId: 1, date: 1, status: 1, flags: 1 }
+    {
+      employeeId: 1,
+      date: 1,
+      status: 1,
+      flags: 1,
+      firstCheckInAt: 1,
+      lastCheckOutAt: 1,
+      workedMinutes: 1,
+    }
   ).lean()
   const byKey = new Map(records.map((r) => [`${r.employeeId}|${r.date}`, r]))
   const dates: PlainDate[] = []
@@ -904,6 +916,9 @@ export async function dayStatuses(
           expected: isExpected(full, date),
           status: (result.status ?? null) as AttendanceStatus | null,
           flags: (result.flags ?? []) as AttendanceFlag[],
+          firstCheckInAt: result.firstCheckInAt ?? null,
+          lastCheckOutAt: result.lastCheckOutAt ?? null,
+          workedMinutes: result.workedMinutes ?? 0,
         }
       }),
     }

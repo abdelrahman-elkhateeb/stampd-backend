@@ -19,6 +19,7 @@ import {
   isWorkingDay,
   loadCompanyToday,
   loadWorkCalendar,
+  type WorkCalendar,
 } from "../organization/calendar.ts"
 import { getRoster } from "../organization/organization.service.ts"
 import { getCompanySettings } from "../organization/settings.service.ts"
@@ -104,6 +105,14 @@ export async function countLeaveDays(input: {
     to: input.endDate,
   })
   if (!calendar) throw apiErrors.notFound()
+  return countLeaveDaysWith(calendar, input)
+}
+
+/** countLeaveDays() with a calendar already loaded (covering the request's dates), e.g. for reports. */
+export function countLeaveDaysWith(
+  calendar: WorkCalendar,
+  input: { startDate: PlainDate; endDate: PlainDate; data: LeaveData }
+): LeaveDays {
   const result: LeaveDays = { days: 0, breakdown: [], excluded: [] }
   for (
     let date = input.startDate;

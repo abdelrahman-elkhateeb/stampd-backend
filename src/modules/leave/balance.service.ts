@@ -21,6 +21,7 @@ import {
   type BalanceSummary,
   type DayAmount,
   type LedgerEntryType,
+  type LedgerLine,
 } from "./balance-math.ts"
 import {
   LeaveBalanceModel,
@@ -780,4 +781,72 @@ export async function leaveUsageByType(
       }
     }),
   }
+}
+
+/**
+ * Balances of many employees for one leave year and some tracked types, read
+ * in one go and without creating anything (reports, BE-14). Someone with no
+ * balance record yet shows what it will start with: the default allowance,
+ * pro-rated from their joining date. Keyed "employeeId|leaveTypeId".
+ */
+export async function balanceSummaries(
+  input: {
+    companyId: string
+    year: number
+    employees: readonly { id: string; joiningDate: PlainDate | null }[]
+    leaveTypes: readonly Pick<LeaveTypeView, "id" | "defaultAllowanceDays">[]
+  },
+  deps: Deps
+): Promise<Map<string, BalanceSummary>> {
+  const { companyId, year } = input
+  const ctx = await companyContext(companyId, deps)
+  const filter = {
+    companyId,
+    year,
+    employeeId: { $in: input.employees.map((e) => e.id) },
+    leaveTypeId: { $in: input.leaveTypes.map((t) => t.id) },
+  }
+  const [balances, entries] = await Promise.all([
+    LeaveBalanceModel.find(filter, { employeeId: 1, leaveTypeId: 1 }).lean(),
+    LeaveLedgerEntryModel.find(filter, {
+      employeeId: 1,
+      leaveTypeId: 1,
+      type: 1,
+      days: 1,
+      breakdown: 1,
+    }).lean(),
+  ])
+  const started = new Set(
+    balances.map((b) => `${b.employeeId}|${b.leaveTypeId}`)
+  )
+  const lines = new Map<string, LedgerLine[]>()
+  for (const e of entries) {
+    const key = `${e.employeeId}|${e.leaveTypeId}`
+    lines.set(key, [
+      ...(lines.get(key) ?? []),
+      {
+        type: e.type as LedgerEntryType,
+        days: e.days,
+        breakdown: e.breakdown?.map((d) => ({ date: d.date!, days: d.days })),
+      },
+    ])
+  }
+  const result = new Map<string, BalanceSummary>()
+  for (const employee of input.employees) {
+    for (const type of input.leaveTypes) {
+      const key = `${employee.id}|${type.id}`
+      const own = lines.get(key) ?? []
+      if (!started.has(key)) {
+        const proposed = proratedAllowance({
+          allowance: type.defaultAllowanceDays,
+          joiningDate: employee.joiningDate,
+          year,
+          startMonth: ctx.startMonth,
+        })
+        own.unshift({ type: "ALLOWANCE", days: proposed })
+      }
+      result.set(key, summarize(own, ctx.today))
+    }
+  }
+  return result
 }

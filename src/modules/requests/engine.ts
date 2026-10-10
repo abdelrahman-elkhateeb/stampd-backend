@@ -900,6 +900,50 @@ export async function findOverlappingRequests(input: {
   return docs.map((doc) => toRecord(doc as RequestDoc))
 }
 
+export type ReportRequest = RequestRecord & {
+  submittedAt: Date | null
+  decidedBy: string | null
+  decidedAt: Date | null
+  cancelledAt: Date | null
+}
+
+/**
+ * Requests of some types and employees overlapping a date range, oldest
+ * start first, with their decision (reports, BE-14). The caller has already
+ * limited the employees to what it may see.
+ */
+export async function listRequestsForReport(input: {
+  companyId: string
+  types: string[]
+  requesterIds: string[]
+  from: PlainDate
+  to: PlainDate
+  statuses?: RequestStatus[]
+  /** LEAVE only: data.leaveTypeId among these */
+  leaveTypeIds?: string[]
+}): Promise<ReportRequest[]> {
+  const docs = await RequestModel.find({
+    companyId: input.companyId,
+    type: { $in: input.types },
+    requesterId: { $in: input.requesterIds },
+    startDate: { $lte: input.to },
+    endDate: { $gte: input.from },
+    ...(input.statuses ? { status: { $in: input.statuses } } : {}),
+    ...(input.leaveTypeIds
+      ? { "data.leaveTypeId": { $in: input.leaveTypeIds } }
+      : {}),
+  })
+    .sort({ startDate: 1, _id: 1 })
+    .lean()
+  return docs.map((doc) => ({
+    ...toRecord(doc as RequestDoc),
+    submittedAt: doc.submittedAt ?? doc.createdAt ?? null,
+    decidedBy: doc.decidedBy ?? null,
+    decidedAt: doc.decidedAt ?? null,
+    cancelledAt: doc.cancelledAt ?? null,
+  }))
+}
+
 /** One employee's requests, for whoever may see them (self, their manager, Admins). */
 export async function listRequestsOf(
   auth: AuthContext,

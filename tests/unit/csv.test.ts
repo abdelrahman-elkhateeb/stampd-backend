@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { CsvError, parseCsv } from "../../src/platform/csv.ts"
+import { CsvError, parseCsv, toCsv } from "../../src/platform/csv.ts"
 
 describe("parseCsv", () => {
   it("reads rows and cells with their line numbers", () => {
@@ -32,5 +32,42 @@ describe("parseCsv", () => {
   it("rejects broken quoting", () => {
     expect(() => parseCsv('name\n"never closed')).toThrow(CsvError)
     expect(() => parseCsv('name\nab"c"')).toThrow(CsvError)
+  })
+})
+
+describe("toCsv", () => {
+  it("writes a byte-order mark, one header row and CRLF lines", () => {
+    expect(
+      toCsv(
+        ["name", "days"],
+        [
+          ["سارة", 2.5],
+          ["Zoë", 0],
+        ]
+      )
+    ).toBe("﻿name,days\r\nسارة,2.5\r\nZoë,0\r\n")
+  })
+
+  it("quotes commas, quotes and line breaks; empty cells for null; yes/no", () => {
+    expect(
+      toCsv(
+        ["a", "b", "c", "d"],
+        [['Haddad, "Lina"', "two\nlines", null, true]]
+      )
+    ).toBe('﻿a,b,c,d\r\n"Haddad, ""Lina""","two\nlines",,yes\r\n')
+  })
+
+  it("keeps text from running as a spreadsheet formula, but not numbers", () => {
+    expect(toCsv(["x"], [["=SUM(A1)"], ["-5"], ["@cmd"], [-5]])).toBe(
+      "﻿x\r\n'=SUM(A1)\r\n'-5\r\n'@cmd\r\n-5\r\n"
+    )
+  })
+
+  it("reads back with parseCsv", () => {
+    const rows = [["Haddad, Lina", 'Lead "Ops"', "سارة"]]
+    expect(parseCsv(toCsv(["a", "b", "c"], rows)).map((r) => r.cells)).toEqual([
+      ["a", "b", "c"],
+      ...rows,
+    ])
   })
 })

@@ -66,3 +66,27 @@ export function parseCsv(text: string): CsvRow[] {
   endRow()
   return rows
 }
+
+export type CsvCell = string | number | boolean | null | undefined
+
+/** Text that a spreadsheet would run as a formula ("=…", "+…", "-…", "@…"). */
+const FORMULA_START = /^[=+\-@\t\r]/
+
+function csvCell(value: CsvCell): string {
+  if (value === null || value === undefined) return ""
+  if (typeof value === "number") return String(value)
+  if (typeof value === "boolean") return value ? "yes" : "no"
+  // Names and other typed text never run as a formula in Excel.
+  const text = FORMULA_START.test(value) ? `'${value}` : value
+  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text
+}
+
+/**
+ * Writes a CSV file the way Excel opens it correctly (BE-14): UTF-8 with a
+ * byte-order mark (so Arabic and accented names show), one header row, CRLF
+ * line endings, fields quoted when needed. Booleans become yes / no.
+ */
+export function toCsv(header: readonly string[], rows: readonly CsvCell[][]) {
+  const lines = [header, ...rows].map((row) => row.map(csvCell).join(","))
+  return `\uFEFF${lines.join("\r\n")}\r\n`
+}
