@@ -12,6 +12,7 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
     "start:migrate": "node dist/platform/db/migrate-cli.js && node dist/server.js",
+    "vercel-build": "tsc -p tsconfig.build.json && node dist/platform/db/migrate-cli.js --production-only",
     "db:migrate": "tsx --env-file-if-exists=.env src/platform/db/migrate-cli.ts",
     "db:seed": "tsx --env-file-if-exists=.env src/platform/db/seed-cli.ts",
     "db:setup": "pnpm db:migrate && pnpm db:seed",

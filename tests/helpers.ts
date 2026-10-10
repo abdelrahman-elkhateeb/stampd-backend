@@ -14,6 +14,8 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
     logLevel: "silent",
     authTokenSecret: "test-secret-0123456789abcdefghijklmnopqrstuv",
     webAppUrl: "http://localhost:3000",
+    cronSecret: null,
+    vercelEnv: null,
     ...overrides,
   }
 }

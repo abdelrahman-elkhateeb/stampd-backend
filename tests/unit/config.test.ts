@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest"
 
-import { ConfigError, loadConfig } from "../../src/config/env.ts"
+import {
+  ConfigError,
+  loadConfig,
+  vercelEnvironment,
+} from "../../src/config/env.ts"
 
 const valid = {
   APP_ENV: "local",
@@ -25,7 +29,25 @@ describe("loadConfig", () => {
       logLevel: "info",
       authTokenSecret: valid.AUTH_TOKEN_SECRET,
       webAppUrl: "http://localhost:3000",
+      cronSecret: null,
+      vercelEnv: null,
     })
+  })
+
+  it("reads the scheduled-job secret and the Vercel environment (serverless)", () => {
+    const config = loadConfig({
+      ...deployed,
+      CRON_SECRET: "c".repeat(32),
+      VERCEL_ENV: "production",
+    })
+    expect(config.cronSecret).toBe("c".repeat(32))
+    expect(config.vercelEnv).toBe("production")
+    expect(() => loadConfig({ ...valid, CRON_SECRET: "short" })).toThrow(
+      /CRON_SECRET/
+    )
+    expect(() => loadConfig({ ...valid, VERCEL_ENV: "staging" })).toThrow(
+      /VERCEL_ENV/
+    )
   })
 
   it("coerces the port from a string", () => {
@@ -84,5 +106,14 @@ describe("loadConfig", () => {
 
   it("returns a frozen object", () => {
     expect(Object.isFrozen(loadConfig(valid))).toBe(true)
+  })
+})
+
+describe("vercelEnvironment", () => {
+  it("reads only VERCEL_ENV, so the build can decide before other settings exist", () => {
+    expect(vercelEnvironment({ VERCEL_ENV: "production" })).toBe("production")
+    expect(vercelEnvironment({ VERCEL_ENV: "preview" })).toBe("preview")
+    expect(vercelEnvironment({})).toBeNull()
+    expect(vercelEnvironment({ VERCEL_ENV: "staging" })).toBeNull()
   })
 })

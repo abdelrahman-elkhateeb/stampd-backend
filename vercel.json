@@ -1,0 +1,24 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "npx --yes pnpm@11.25.0 install --frozen-lockfile",
+  "buildCommand": "npm run vercel-build",
+  "outputDirectory": "public",
+  "regions": ["pdx1"],
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/jobs/attendance.close",
+      "schedule": "30 21 * * *"
+    },
+    {
+      "path": "/jobs/leave.rollover",
+      "schedule": "45 21 * * *"
+    }
+  ]
+}

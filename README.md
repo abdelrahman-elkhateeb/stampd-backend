@@ -108,6 +108,7 @@ Each ticket adds its endpoints to this table. The exact request and response bod
 | `pnpm dev`                                           | Run from source with reload (`src/server.ts`), reading `.env`             |
 | `pnpm build` / `pnpm start`                          | Compile to `dist/` / run the compiled API (environment from the platform) |
 | `pnpm start:migrate`                                 | Migrate, then start (what the container does)                             |
+| `pnpm vercel-build`                                  | The Vercel build: compile, then migrate (production deployments only)     |
 | `pnpm db:migrate`                                    | Sync indexes from the models and apply pending data migrations            |
 | `pnpm db:seed`                                       | Upsert the demo company (idempotent; refused when `APP_ENV=production`)   |
 | `pnpm db:setup`                                      | `db:migrate` + `db:seed`                                                  |
@@ -128,6 +129,8 @@ All configuration comes from environment variables, validated at startup by `src
 | `LOG_LEVEL`         | no                 | `info`                  | `error`, `warn`, `info`, `debug`, `silent`                                                                                                                                                 |
 | `AUTH_TOKEN_SECRET` | everywhere         | —                       | Signs access tokens and derives rotated refresh tokens; at least 32 characters. The `.env.example` value works locally only (staging/production refuse it). Changing it signs everyone out |
 | `WEB_APP_URL`       | staging/production | `http://localhost:3000` | The web app's base URL, used to build invite and reset links (`{WEB_APP_URL}/{locale}/invite/{token}`)                                                                                     |
+| `CRON_SECRET`       | on Vercel          | —                       | At least 32 characters. Turns on `GET /jobs/{name}` for Vercel Cron, which sends it as `Authorization: Bearer …`. Unset: the route doesn't exist and `server.ts` runs the jobs itself      |
+| `VERCEL_ENV`        | no (set by Vercel) | —                       | `production`, `preview` or `development`. Migrations in `vercel-build` run only for `production`                                                                                           |
 | `TEST_MONGODB_URI`  | no                 | —                       | Integration tests only: use this server instead of the built-in one (database name must contain `test`; it is dropped)                                                                     |
 
 `.env` is git-ignored and only for local development (`pnpm dev`, `db:*` scripts load it with Node's `--env-file`). Staging and production values are set in the hosting platform. No credentials live in this repository.
@@ -137,6 +140,7 @@ All configuration comes from environment variables, validated at startup by `src
 ```
 src/
   server.ts                 Process entry: config → logger → app → listen → connect MongoDB (with retry)
+  serverless.ts             Vercel entry: the same app as one request handler (api/index.js)
   app.ts                    createApp(): request context → JSON body → module routers → 404 → error handler
   config/env.ts             The only reader of process.env (Zod)
   platform/                 Shared infrastructure, no business rules
@@ -171,7 +175,7 @@ src/
                             reports and CSV export (reports.service.ts)   (BE-14)
     notifications/                                                        (BE-15)
   platform/storage/files.ts image uploads: type check, storage, signed URLs (BE-05)
-  platform/jobs.ts          background jobs started by server.ts (BE-07)
+  platform/jobs.ts          background jobs: timers in server.ts, or GET /jobs/{name} for Vercel Cron
   platform/db/append-only.ts  insert-only collections: history, leave ledger (BE-08)
   platform/events.ts        in-process domain events (BE-09 publishes, BE-15 listens)
   platform/csv.ts           CSV reader for imports (BE-06)
@@ -405,7 +409,7 @@ How the engine behaves:
 - **Expected attendance:** from the joining date through the last working day, for employees with `tracksAttendance`. Invited accounts are never expected.
 - **Approved day effects:** leave and requests (BE-10/BE-11) tell attendance which days are covered through `registerDayEffectsProvider()`; until then no day has effects.
 - **Never two open sessions:** a unique index on the open flag makes a double click or two tabs return the session already open. A session can't cross the company's midnight: one left open is closed without a check-out.
-- **End-of-day close** (`close-job.ts`, every minute, started by `server.ts`): for each company, every day that is over in **its own timezone** and not closed yet (catching up at most 7 days) gets:
+- **End-of-day close** (`close-job.ts`, every minute in `server.ts`; once a day through Vercel Cron, see Deploying to Vercel): for each company, every day that is over in **its own timezone** and not closed yet (catching up at most 7 days) gets:
   - open sessions → `MISSING_CHECKOUT` (their time doesn't count);
   - expected employees with nothing → `ABSENT`;
   - history entries with actor "system".
@@ -514,7 +518,7 @@ Which calendar day an instant falls on depends on the company timezone: use `pla
 
 ## Database
 
-- **Connection:** `connectDatabase()` in `src/platform/db/connection.ts` opens Mongoose's default connection; every model registers on it. `server.ts` starts HTTP first and keeps retrying the connection every 5 s, so `/health` reports `DEGRADED` instead of the process crash-looping.
+- **Connection:** `connectDatabase()` in `src/platform/db/connection.ts` opens Mongoose's default connection; every model registers on it. `server.ts` starts HTTP first and keeps retrying the connection every 5 s, so `/health` reports `DEGRADED` instead of the process crash-looping. On Vercel, `ensureDatabase()` connects on an instance's first request and reuses the connection afterwards; a failed attempt is retried on the next request.
 - **Models:** each module defines its models, e.g. `src/modules/organization/company.model.ts`, and lists them in `src/platform/db/models.ts`.
 - **Migrations:** MongoDB has no schema migrations. `pnpm db:migrate` (and the container on start) does two things:
   - It runs `syncIndexes()` for every model, so indexes declared on the models are created or updated.
@@ -569,6 +573,41 @@ Which calendar day an instant falls on depends on the company timezone: use `pla
 ## CI
 
 `.github/workflows/ci.yml` runs on every pull request and on `main`. It installs with the frozen lockfile, then runs `format:check`, `lint`, `typecheck`, `build`, unit tests and integration tests (the MongoDB binary is cached between runs). Any failing step fails the build.
+
+## Deploying to Vercel (serverless)
+
+The API also runs on Vercel as **one serverless function**: the same Express app and every endpoint, with no code path of its own.
+
+| Piece               | What it does                                                                                                                                                                                                                |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `vercel.json`       | Sends every path to the function (`rewrites`), runs it in `pdx1` (Oregon, next to the Atlas cluster in us-west-2), installs with the pinned pnpm (`packageManager`), builds with `vercel-build`, and schedules the two jobs |
+| `api/index.js`      | The function: `createServerlessHandler()` from the compiled `dist/serverless.js`                                                                                                                                            |
+| `src/serverless.ts` | Builds the app once per instance. Each request first makes sure MongoDB is connected (opened on the first request, then reused; pool of 5 per instance), then runs the app                                                  |
+| `GET /jobs/{name}`  | Runs one background job (`attendance.close`, `leave.rollover`). Vercel Cron calls it with `CRON_SECRET`; wrong or missing secret → `401`, unknown job → `404`                                                               |
+| `public/`           | The only static output (`robots.txt` blocks crawlers), so no project file is ever served                                                                                                                                    |
+
+**Scheduled jobs.** On the Hobby plan a cron job may run at most once a day, so both run daily: `attendance.close` at 21:30 UTC (00:30 in Riyadh, 01:30 in Dubai) and `leave.rollover` at 21:45 UTC. That is enough because:
+
+- both jobs catch up: each run closes every finished day not closed yet (up to 7 days), and opens a leave year late without losing anything;
+- screens and reports never wait for the close: a past working day without a check-in already shows as Absent when read.
+
+On the Pro plan, change both schedules to hourly (`0 * * * *`) to close days closer to each company's midnight.
+
+**Migrations.** `pnpm vercel-build` compiles, then syncs indexes and applies data migrations, **for production deployments only** (`VERCEL_ENV=production`). Preview deployments skip it so they never change the shared database. A production build whose migration fails is not deployed.
+
+**One-time setup:**
+
+1. Vercel → **Add New → Project** → import the `stampd-backend` repository. Leave the framework as **Other**; `vercel.json` sets the rest.
+2. **Settings → Environment Variables** (Production, and Preview if you use previews): `APP_ENV=production` (or `staging`), `MONGODB_URI`, `AUTH_TOKEN_SECRET`, `WEB_APP_URL` (the deployed web app), `CRON_SECRET` (both secrets: `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`).
+3. **MongoDB Atlas → Network Access:** Vercel functions have no fixed IP addresses on Hobby/Pro, so allow `0.0.0.0/0` and rely on the database user's password (use a strong one).
+4. Deploy (every push to `main` deploys production; other branches get preview URLs). Check `https://<project>.vercel.app/health`.
+5. To load the demo company once: `pnpm db:seed` locally with the production `MONGODB_URI` and `APP_ENV=staging` (seeding refuses `production`).
+
+Test a job by hand after a production deploy: Vercel → **Settings → Cron Jobs → Run**, or `curl -H "Authorization: Bearer $CRON_SECRET" https://<project>.vercel.app/jobs/attendance.close`.
+
+**Limits to know:** request bodies up to 4.5 MB on Vercel (the API's own limits are lower: 1 MB JSON and CSV, 2 MB images), and logs are the JSON lines in Vercel → **Logs**.
+
+The Docker image and the staging pipeline below still work for container hosts.
 
 ## Staging
 

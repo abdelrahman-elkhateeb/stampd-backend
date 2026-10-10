@@ -1,10 +1,24 @@
-/** pnpm db:migrate — sync indexes and apply pending data migrations, then exit. */
+/**
+ * pnpm db:migrate — sync indexes and apply pending data migrations, then exit.
+ *
+ * With --production-only (the Vercel build, "vercel-build"), it runs only for
+ * production deployments: preview builds share the database and must not
+ * change its indexes.
+ */
 import mongoose from "mongoose"
 
-import { loadConfig } from "../../config/env.ts"
+import { loadConfig, vercelEnvironment } from "../../config/env.ts"
 import { connectDatabase, disconnectDatabase } from "./connection.ts"
 import { runMigrations } from "./migrations.ts"
 
+const productionOnly = process.argv.includes("--production-only")
+const deployment = vercelEnvironment()
+if (productionOnly && deployment !== "production") {
+  console.log(
+    `Migrations skipped: not a production deployment (VERCEL_ENV=${deployment ?? "unset"}).`
+  )
+  process.exit(0)
+}
 const config = loadConfig()
 try {
   await connectDatabase(config.mongodbUri)

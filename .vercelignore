@@ -1,0 +1,8 @@
+# Never upload local secrets or build leftovers with `vercel deploy`.
+.env
+.env.*
+!.env.example
+node_modules
+dist
+coverage
+*.log

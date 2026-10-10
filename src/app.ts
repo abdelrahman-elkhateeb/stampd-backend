@@ -5,6 +5,7 @@ import { MODULES } from "./modules/index.ts"
 import type { AppModule } from "./modules/module.ts"
 import { errorHandler, notFoundHandler } from "./platform/http/error-handler.ts"
 import { requestContext } from "./platform/http/request-context.ts"
+import { jobsRouter } from "./platform/jobs.ts"
 import type { Logger } from "./platform/logging/logger.ts"
 import { systemClock, type Clock } from "./platform/time/clock.ts"
 import {
@@ -28,6 +29,7 @@ export type CreateAppOptions = {
  * Builds the Express app without listening, so tests run the same app.
  * Order matters:
  *   request ID + logging → JSON body parsing → module routes
+ *   → scheduled-job routes (when CRON_SECRET is set)
  *   → 404 for anything else → error handler (last).
  */
 export function createApp(options: CreateAppOptions): Express {
@@ -50,9 +52,20 @@ export function createApp(options: CreateAppOptions): Express {
     checkDatabase: options.checkDatabase,
     clock: options.clock ?? systemClock,
   }
-  for (const module of options.modules ?? MODULES) {
+  const modules = options.modules ?? MODULES
+  for (const module of modules) {
     const router = module.routes(deps)
     if (router) app.use(router)
+  }
+  // Serverless hosts run the background jobs through HTTP (Vercel Cron).
+  if (config.cronSecret) {
+    app.use(
+      jobsRouter({
+        jobs: modules.flatMap((module) => module.jobs?.(deps) ?? []),
+        secret: config.cronSecret,
+        logger,
+      })
+    )
   }
 
   app.use(notFoundHandler)

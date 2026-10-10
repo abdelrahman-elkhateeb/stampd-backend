@@ -38,11 +38,34 @@ export function inTransaction(): boolean {
  * The one MongoDB connection (Mongoose's default connection, where every
  * model in src/modules registers). Opened by server.ts and the CLI scripts.
  */
-export async function connectDatabase(uri: string): Promise<typeof mongoose> {
-  return mongoose.connect(uri, { serverSelectionTimeoutMS: 5_000 })
+export async function connectDatabase(
+  uri: string,
+  options: { maxPoolSize?: number } = {}
+): Promise<typeof mongoose> {
+  return mongoose.connect(uri, { serverSelectionTimeoutMS: 5_000, ...options })
+}
+
+/**
+ * For serverless functions (src/serverless.ts): every invocation calls this,
+ * the first one connects and the following ones reuse the open connection
+ * (a warm instance keeps it between requests). Concurrent first calls share
+ * one attempt; a failed attempt is retried on the next call.
+ */
+let connecting: Promise<unknown> | null = null
+export async function ensureDatabase(
+  uri: string,
+  options: { maxPoolSize?: number } = {}
+): Promise<void> {
+  if (mongoose.connection.readyState === 1) return
+  connecting ??= connectDatabase(uri, options).catch((error: unknown) => {
+    connecting = null
+    throw error
+  })
+  await connecting
 }
 
 export async function disconnectDatabase(): Promise<void> {
+  connecting = null
   await mongoose.disconnect()
 }
 
