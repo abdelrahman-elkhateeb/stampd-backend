@@ -814,3 +814,28 @@ export async function closeAttendanceDay(
   }
   return { closed }
 }
+
+/**
+ * Recomputes an employee's stored days in a range, e.g. after approved leave
+ * covering them is approved or cancelled (BE-10): a past day closed as Absent
+ * becomes On Leave, and back. Days with nothing stored are computed when
+ * shown, so they need nothing. Joins the caller's transaction.
+ */
+export async function recalculateStoredDays(
+  input: {
+    companyId: string
+    employeeId: string
+    from: PlainDate
+    to: PlainDate
+  },
+  deps: Deps
+): Promise<void> {
+  const { companyId, employeeId, from, to } = input
+  const stored = await AttendanceDayModel.find(
+    { companyId, employeeId, date: { $gte: from, $lte: to } },
+    { date: 1 }
+  ).lean()
+  if (!stored.length) return
+  const ctx = await personContext(companyId, employeeId, from, to, deps)
+  for (const day of stored) await recalculateDay(ctx, employeeId, day.date!)
+}

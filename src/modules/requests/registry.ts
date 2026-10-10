@@ -58,8 +58,8 @@ export type RequestTypeDefinition = {
    * (leave), "WFH", or not at all (trips, permissions, corrections).
    */
   colleagueVisibility: "OUT" | "WFH" | "HIDDEN"
-  /** What an approved request means for attendance on each day (BE-07), if anything */
-  dayEffect?: (request: RequestRecord) => DayEffect | null
+  /** What an approved request means for attendance on a day of it (BE-07), if anything */
+  dayEffect?: (request: RequestRecord, date: PlainDate) => DayEffect | null
   /** Extra checks at submission (throw a field error to refuse) */
   validate?: (
     ctx: HookContext & { data: Record<string, unknown> }

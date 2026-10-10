@@ -38,6 +38,8 @@ export type ErrorCode =
   // BE-09: requests
   | "REQUEST_STATUS_CONFLICT"
   | "REQUEST_STARTED"
+  // BE-10: leave requests
+  | "REQUEST_OVERLAP"
 
 export const FIELD_ERROR_CODES = [
   "REQUIRED",
@@ -58,6 +60,9 @@ export const FIELD_ERROR_CODES = [
   "SELF_MANAGER",
   "NOT_A_MANAGER",
   "MANAGER_LOOP",
+  // BE-10: leave requests
+  "NO_WORKING_DAYS",
+  "CROSSES_LEAVE_YEAR",
 ] as const
 
 export type FieldErrorCode = (typeof FIELD_ERROR_CODES)[number]

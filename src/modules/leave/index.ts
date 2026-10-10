@@ -25,6 +25,18 @@ import {
   removeLeaveType,
 } from "./leave-types.service.ts"
 import { runLeaveRollover } from "./rollover-job.ts"
+import {
+  HALVES,
+  LEAVE,
+  previewLeave,
+  registerLeaveRequestType,
+} from "./leave-request.ts"
+import { listRequestsOf } from "../requests/engine.ts"
+import { REQUEST_STATUSES } from "../requests/request.model.ts"
+import { isPlainDate } from "../../platform/time/time.ts"
+
+// Leave requests run on the request engine (BE-09) as the type "LEAVE".
+registerLeaveRequestType()
 
 const halfDays = (min: number) =>
   z
@@ -284,6 +296,101 @@ export const leaveModule: AppModule = {
               deps
             ),
           }
+        }
+      )
+    )
+
+    // ── leave requests (submitted with POST /requests, type "LEAVE"; BE-10) ──
+    const plainDate = z
+      .string()
+      .refine(isPlainDate, "must be a date (YYYY-MM-DD)")
+    router.post(
+      "/leave/requests/preview",
+      auth,
+      route(
+        {
+          body: z.object({
+            employeeId: z.uuid().optional(),
+            leaveTypeId: z.uuid(),
+            startDate: plainDate,
+            endDate: plainDate.optional(),
+            firstDayHalf: z.enum(HALVES).nullable().optional(),
+            lastDayHalf: z.enum(HALVES).nullable().optional(),
+            reason: z.string().max(1000).nullable().optional(),
+          }),
+        },
+        async ({ body, req }) => {
+          const callerAuth = getAuth(req)
+          const employeeId = body.employeeId ?? callerAuth.userId
+          if (employeeId !== callerAuth.userId) {
+            // Only Admins submit for someone else, so only they preview for them.
+            if (callerAuth.role !== "ADMIN") throw apiErrors.forbidden()
+            await authorize(callerAuth, "leave", "view", employeeId)
+          }
+          const endDate = body.endDate ?? body.startDate
+          if (endDate < body.startDate) {
+            throw apiErrors.fieldError(
+              "endDate",
+              "OUT_OF_RANGE",
+              "endDate must be on or after startDate"
+            )
+          }
+          return {
+            status: 200,
+            body: await previewLeave(
+              {
+                auth: callerAuth,
+                employeeId,
+                startDate: body.startDate,
+                endDate,
+                data: {
+                  leaveTypeId: body.leaveTypeId,
+                  firstDayHalf: body.firstDayHalf,
+                  lastDayHalf: body.lastDayHalf,
+                },
+                reason: body.reason ?? null,
+              },
+              deps
+            ),
+          }
+        }
+      )
+    )
+    router.get(
+      "/leave/employees/:employeeId/requests",
+      auth,
+      route(
+        {
+          params: z.object({ employeeId: z.uuid() }),
+          query: listQuery({
+            sortFields: ["startDate", "createdAt"],
+            defaultSort: "-startDate",
+          }).extend({
+            status: z
+              .preprocess(
+                (v) => (v === undefined ? undefined : [v].flat()),
+                z.array(z.enum(REQUEST_STATUSES))
+              )
+              .optional(),
+            from: plainDate.optional(),
+            to: plainDate.optional(),
+          }),
+        },
+        async ({ params, query, req }) => {
+          const page = toPageRequest(query)
+          const { items, total } = await listRequestsOf(
+            getAuth(req),
+            params.employeeId,
+            {
+              types: [LEAVE],
+              statuses: query.status,
+              from: query.from,
+              to: query.to,
+            },
+            page,
+            deps
+          )
+          return { status: 200, body: toPage(items, total, page) }
         }
       )
     )

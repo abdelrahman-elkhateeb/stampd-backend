@@ -858,6 +858,50 @@ export async function listMyRequests(
 }
 
 /**
+ * Requests overlapping a date range (for type rules such as "no overlapping
+ * leave"), optionally of one requester, some types and some statuses.
+ */
+export async function findOverlappingRequests(input: {
+  companyId: string
+  from: PlainDate
+  to: PlainDate
+  requesterId?: string
+  types?: string[]
+  statuses: RequestStatus[]
+  excludeId?: string
+}): Promise<RequestRecord[]> {
+  const docs = await RequestModel.find({
+    companyId: input.companyId,
+    status: { $in: input.statuses },
+    startDate: { $lte: input.to },
+    endDate: { $gte: input.from },
+    ...(input.requesterId ? { requesterId: input.requesterId } : {}),
+    ...(input.types ? { type: { $in: input.types } } : {}),
+    ...(input.excludeId ? { _id: { $ne: input.excludeId } } : {}),
+  })
+    .sort({ startDate: 1 })
+    .lean()
+  return docs.map((doc) => toRecord(doc as RequestDoc))
+}
+
+/** One employee's requests, for whoever may see them (self, their manager, Admins). */
+export async function listRequestsOf(
+  auth: AuthContext,
+  employeeId: string,
+  filters: ListFilters,
+  page: Page,
+  deps: Deps
+) {
+  await authorize(auth, "requests", "view", employeeId)
+  return pageOf(
+    auth,
+    { ...filterQuery(auth.companyId, filters), requesterId: employeeId },
+    page,
+    deps
+  )
+}
+
+/**
  * Requests the caller decides (by default PENDING and CANCELLATION_REQUESTED):
  * a Manager's direct reports (Admin-only types excluded); every employee for
  * an Admin (their own only when they are the company's only Admin).
@@ -931,13 +975,15 @@ export function integrateRequestEngine(): void {
     }).lean()
     return docs.flatMap((doc) => {
       const record = toRecord(doc as RequestDoc)
-      const effect = getRequestType(doc.type)?.dayEffect?.(record)
-      if (!effect) return []
+      const definition = getRequestType(doc.type)
+      if (!definition?.dayEffect) return []
       const entries = []
       const start = record.startDate > from ? record.startDate : from
       const end = record.endDate < to ? record.endDate : to
       for (let date = start; date <= end; date = addDays(date, 1)) {
-        entries.push({ ...effect, employeeId: record.requesterId, date })
+        const effect = definition.dayEffect(record, date)
+        if (effect)
+          entries.push({ ...effect, employeeId: record.requesterId, date })
       }
       return entries
     })
@@ -947,7 +993,8 @@ export function integrateRequestEngine(): void {
     const docs = (
       await RequestModel.find(overlapping(companyId, startDate, endDate)).lean()
     ).filter((doc) =>
-      getRequestType(doc.type)?.dayEffect?.(toRecord(doc as RequestDoc))
+      // Requests that affect attendance (leave, WFH, trips…)
+      Boolean(getRequestType(doc.type)?.dayEffect)
     )
     const names = await getEmployeeNames({
       companyId,

@@ -2,7 +2,7 @@
 
 API for **Stampd**, the Employee Ops Platform (attendance, leave, requests and approvals for GCC teams).
 
-**Status:** BE-01 (foundation), BE-02 (authentication, company signup, tenant isolation) BE-03 (roles, data scopes, permission checks), BE-04 (change history), BE-05 (company settings, work calendar, holidays, image uploads) BE-06 (departments, employee management, offboarding) BE-07 (attendance: check-in/out, daily status, end-of-day close, corrections) BE-08 (leave types, policies, balance ledger) and BE-09 (the request & approval engine) are in place. Endpoints: health, signup, login, sessions, invitations, password reset, current user, change password, a record's history, settings, calendar, holidays, logo and photo uploads, departments, employees, attendance, leave types and balances, requests and approvals (table below). BE-03 adds no endpoints; it adds the checks every later endpoint uses. The other business endpoints arrive with BE-10 … BE-15; BE-10 and BE-11 register the real request types.
+**Status:** BE-01 (foundation), BE-02 (authentication, company signup, tenant isolation) BE-03 (roles, data scopes, permission checks), BE-04 (change history), BE-05 (company settings, work calendar, holidays, image uploads) BE-06 (departments, employee management, offboarding) BE-07 (attendance: check-in/out, daily status, end-of-day close, corrections) BE-08 (leave types, policies, balance ledger) BE-09 (the request & approval engine) and BE-10 (leave requests) are in place. Endpoints: health, signup, login, sessions, invitations, password reset, current user, change password, a record's history, settings, calendar, holidays, logo and photo uploads, departments, employees, attendance, leave types and balances, requests and approvals (table below). BE-03 adds no endpoints; it adds the checks every later endpoint uses. The other business endpoints arrive with BE-11 … BE-15; BE-11 registers the other request types.
 
 **Stack:** TypeScript · Express 5 · MongoDB · Mongoose · Zod. Those three (express, mongoose, zod) are the only runtime dependencies. Node 24, pnpm.
 
@@ -85,8 +85,10 @@ curl -s -X POST http://localhost:4000/auth/login -H 'content-type: application/j
 | GET                   | `/requests/mine`, `/requests/approvals`                                                                                        | bearer (approvals: Manager or Admin) | `200 { items, meta }` with filters                                                                                             | BE-09  |
 | GET                   | `/requests/{id}`                                                                                                               | bearer                               | `200` detail with `actions` and `timeline`                                                                                     | BE-09  |
 | POST                  | `/requests/{id}/approve`, `/reject`, `/withdraw`, `/cancellation`, `/cancellation/approve`, `/cancellation/decline`, `/cancel` | bearer                               | `200` detail; `409 REQUEST_STATUS_CONFLICT` when someone acted first                                                           | BE-09  |
+| POST                  | `/leave/requests/preview`                                                                                                      | bearer                               | `200` days, excluded days, balance before/after, problems, conflicts, who else is off                                          | BE-10  |
+| GET                   | `/leave/employees/{id}/requests`                                                                                               | bearer                               | `200 { items, meta }`: leave history (self / team / company)                                                                   | BE-10  |
 
-Each ticket adds its endpoints to this table. The exact request and response bodies and error codes of every endpoint are on its Trello ticket (BE-02 for the identity endpoints, BE-04 for history, BE-05 for settings, holidays, calendar and uploads, BE-06 for departments and employees, BE-07 for attendance, BE-08 for leave types and balances, BE-09 for requests).
+Each ticket adds its endpoints to this table. The exact request and response bodies and error codes of every endpoint are on its Trello ticket (BE-02 for the identity endpoints, BE-04 for history, BE-05 for settings, holidays, calendar and uploads, BE-06 for departments and employees, BE-07 for attendance, BE-08 for leave types and balances, BE-09 for requests, BE-10 for leave requests).
 
 ## Scripts
 
@@ -148,6 +150,7 @@ src/
                             views, corrections, end-of-day close job
     leave/                  leave types, balance ledger (balance-math.ts, (BE-08)
                             balance.service.ts), leave-year rollover job
+                            leave-request.ts: the LEAVE request type       (BE-10)
     requests/               request engine (engine.ts), type registry       (BE-09)
                             (registry.ts); types come from BE-10/BE-11
     reporting/ notifications/                                             (BE-13 … BE-15)
@@ -294,6 +297,24 @@ How the engine behaves:
   - approved requests become attendance day effects (BE-07);
   - adding a holiday lists the approved requests on its dates (BE-05);
   - offboarding withdraws pending requests and cancels future approved ones, running each type's `onCancel` (BE-06).
+
+**Leave requests (BE-10).** Leave is the request type `LEAVE` on the engine (`src/modules/leave/leave-request.ts`), submitted with `POST /requests` and `data: { leaveTypeId, firstDayHalf?, lastDayHalf? }`.
+
+- **Day count:** only working days count; weekends and holiday days are excluded and listed. A half day is the first day's `MORNING`/`AFTERNOON` for one day. For a range, it can start at noon (`firstDayHalf: "AFTERNOON"`) and end at noon (`lastDayHalf: "MORNING"`).
+- **Refused:**
+  - an inactive type, or a missing reason the type requires;
+  - half days the type doesn't allow;
+  - no working day (`NO_WORKING_DAYS`);
+  - more than 30 days in the past (Admins recording it on someone's behalf are exempt);
+  - beyond the end of the next leave year;
+  - a range across two leave years (`CROSSES_LEAVE_YEAR`: split it);
+  - overlapping the requester's own leave (`409 REQUEST_OVERLAP`);
+  - not enough balance (`409 INSUFFICIENT_BALANCE`, checked under the balance lock).
+
+  The requester's WFH and business trips on those days are flagged by the preview, not refused.
+
+- **Effects:** submit → reserve; approve → deduct per date, and stored attendance days in the range are recalculated (e.g. a past Absent becomes On Leave); reject or withdraw → release; cancel approved → restore the days not taken yet, and recalculate attendance.
+- **Preview** (`POST /leave/requests/preview`) runs the same rules without saving and lists every problem. It also shows who else is off, as the caller may see them: an Employee sees same-department colleagues by name only (BE-03).
 
 **Leave balances (BE-08).** A balance is never stored as a number. It is computed from an append-only **ledger** (`leaveledgerentries`), so every figure can be explained entry by entry:
 
@@ -456,7 +477,7 @@ Which calendar day an instant falls on depends on the company timezone: use `pla
   - BE-06: `departments` (unique name per company); employees gain phone, job title, employee code (unique per company when set), joining date, employment type and `tracksAttendance`; users gain `lastWorkingDay`.
   - BE-07: `attendancesessions` (unique open session per employee), `attendancedays` (unique per employee and day), `attendancecloseruns` (closed days per company). History ids are time-ordered UUIDs (v7), so entries from the same millisecond keep their order.
   - BE-08: `leavetypes` (unique name per company), `leavebalances` (one per employee, type and leave year; also the lock), `leaveledgerentries` (append-only), `leaveyearruns` (years opened per company). Migration `2026-10-10-default-leave-types`.
-  - BE-09: `requests` (one per request of any type; type-specific fields in `data`).
+  - BE-09: `requests` (one per request of any type; type-specific fields in `data`). BE-10 stores leave as `type: "LEAVE"` (no new collection).
 
   Companies also store `weekStart` (default `SUN`) and the terms version, acceptance time and who accepted.
 
@@ -480,7 +501,8 @@ Which calendar day an instant falls on depends on the company timezone: use `pla
   - departments and employees (BE-06): every acceptance criterion (duplicate email, a 50 + 2 row CSV, manager loops, offboarding with reports, login blocked after the last day, the list per role, read-only manager view, the self-service phone);
   - attendance (BE-07): every acceptance criterion, with a clock the tests move to exact local times (09:07 vs 09:12, midnight in Dubai vs Bogotá, parallel check-ins);
   - leave (BE-08): every acceptance criterion, including six parallel requests against one balance (fails without the lock);
-  - requests (BE-09): every acceptance criterion with two test-only request types, including two simultaneous approvals, the sole-Admin exception, and the attendance, holiday and offboarding connections.
+  - requests (BE-09): every acceptance criterion with two test-only request types, including two simultaneous approvals, the sole-Admin exception, and the attendance, holiday and offboarding connections;
+  - leave requests (BE-10): every acceptance criterion (2 of 3 days, overlap, holiday excluded, half day, no working days, 40 days back, On Leave in attendance and back after cancelling) and the colleague privacy rule.
 
 ## CI
 
