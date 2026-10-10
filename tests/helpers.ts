@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import type { AddressInfo } from "node:net"
 import type { Express } from "express"
 
@@ -28,6 +29,17 @@ export function captureLogs() {
     write: (line) => lines.push(JSON.parse(line) as LogFields),
   })
   return { lines, logger }
+}
+
+/** The Vercel function (api/<name>.js) that vercel.json rewrites this path to. */
+export function vercelFunctionFor(path: string): string {
+  const { rewrites } = JSON.parse(
+    readFileSync(new URL("../vercel.json", import.meta.url), "utf8")
+  ) as { rewrites: { source: string; destination: string }[] }
+  const rewrite = rewrites.find(({ source }) =>
+    new RegExp(`^${source}/?$`).test(path)
+  )
+  return rewrite!.destination.replace("/api/", "")
 }
 
 export function buildTestApp(options: Partial<CreateAppOptions> = {}): Express {

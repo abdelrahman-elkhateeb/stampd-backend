@@ -138,7 +138,7 @@ All configuration comes from environment variables, validated at startup by `src
 ```
 src/
   server.ts                 Process entry: config → logger → app → listen → connect MongoDB (with retry)
-  serverless.ts             Vercel entry: the same app as one request handler (api/index.js)
+  serverless.ts             Vercel entry: one request handler per module (api/<module>.js)
   app.ts                    createApp(): request context → JSON body → module routers → 404 → error handler
   config/env.ts             The only reader of process.env (Zod)
   platform/                 Shared infrastructure, no business rules
@@ -572,15 +572,31 @@ Which calendar day an instant falls on depends on the company timezone: use `pla
 
 ## Deploying to Vercel (serverless)
 
-The API also runs on Vercel as **one serverless function**: the same Express app and every endpoint, with no code path of its own.
+The API also runs on Vercel as **one function per domain module** (9 functions): the same Express routers, middleware and error handling, with no code path of its own. `vercel.json` sends each path prefix to its function:
 
-| Piece               | What it does                                                                                                                                                                                                          |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `vercel.json`       | Sends every path to the function (`rewrites`), runs it in `pdx1` (Oregon, next to the Atlas cluster in us-west-2), installs with the pinned pnpm, and schedules the two jobs (the build is the `vercel-build` script) |
-| `api/index.js`      | The function: `createServerlessHandler()` from the compiled `dist/serverless.js`                                                                                                                                      |
-| `src/serverless.ts` | Builds the app once per instance. Each request first makes sure MongoDB is connected (opened on the first request, then reused), then runs the app                                                                    |
-| `GET /jobs/{name}`  | Runs one background job (`attendance.close`, `leave.rollover`). Vercel Cron calls it with `CRON_SECRET`; wrong or missing secret → `401`, unknown job → `404`                                                         |
-| `public/`           | The only static output (`robots.txt` blocks crawlers), so no project file is ever served                                                                                                                              |
+| Function (`api/…`) | Paths                                                               |
+| ------------------ | ------------------------------------------------------------------- |
+| `identity.js`      | `/auth/*`, `/me`, `/me/*`                                           |
+| `organization.js`  | `/company/*`, `/departments`, `/employees`, `/files/*` (and below)  |
+| `attendance.js`    | `/attendance/*`                                                     |
+| `leave.js`         | `/leave/*`                                                          |
+| `requests.js`      | `/requests`, `/requests/*`                                          |
+| `calendar.js`      | `/calendar/*`                                                       |
+| `reporting.js`     | `/dashboard/*`, `/reports/*`                                        |
+| `history.js`       | `/history/*`                                                        |
+| `system.js`        | `/health`, `/jobs/*` and every other path (the standard `404` body) |
+
+| Piece               | What it does                                                                                                                                                                                                           |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `vercel.json`       | Maps path prefixes to functions (`rewrites`), runs them in `pdx1` (Oregon, next to the Atlas cluster in us-west-2), installs with the pinned pnpm, and schedules the two jobs (the build is the `vercel-build` script) |
+| `api/<module>.js`   | One function each: `createServerlessHandler("<module>")` from the compiled `dist/serverless.js`                                                                                                                        |
+| `src/serverless.ts` | Builds the app once per instance with only that module's routes mounted (`createApp({ only })`). Each request first makes sure MongoDB is connected (opened on the first request, then reused), then runs the app      |
+| `GET /jobs/{name}`  | Runs one background job (`attendance.close`, `leave.rollover`). Vercel Cron calls it with `CRON_SECRET`; wrong or missing secret → `401`, unknown job → `404`                                                          |
+| `public/`           | The only static output (`robots.txt` blocks crawlers), so no project file is ever served                                                                                                                               |
+
+**Adding a route or module.** A new path under an existing prefix needs nothing. A new top-level prefix needs a line in `rewrites` (above the final catch-all); a new module also needs `api/<module>.js`. `tests/unit/vercel.test.ts` fails when a route isn't sent to its module's function.
+
+**Trade-offs of separate functions.** Each function scales, cold-starts and fails on its own, so a screen that calls several modules can hit several cold starts instead of one. Each instance of each function opens its own MongoDB pool, so the connection count can be up to 9× the single-function setup: keep `maxPoolSize` small (see setup) and watch the Atlas connection limit (500 on the free tier). The Hobby plan allows 12 functions per deployment; this uses 9, so splitting further (per endpoint, ~90 routes) needs Pro.
 
 **Scheduled jobs.** On the Hobby plan a cron job may run at most once a day, so both run daily: `attendance.close` at 21:30 UTC (00:30 in Riyadh, 01:30 in Dubai) and `leave.rollover` at 21:45 UTC. That is enough because:
 
@@ -594,7 +610,7 @@ On the Pro plan, change both schedules to hourly (`0 * * * *`) to close days clo
 **One-time setup:**
 
 1. Vercel → **Add New → Project** → import the `stampd-backend` repository. Leave the framework as **Other**; `vercel.json` sets the rest.
-2. **Settings → Environment Variables** (Production, and Preview if you use previews): `APP_ENV=production` (or `staging`), `MONGODB_URI` (add `maxPoolSize=5` to its query string: many function instances can run at once), `AUTH_TOKEN_SECRET`, `WEB_APP_URL` (the deployed web app), `CRON_SECRET` (both secrets: `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`).
+2. **Settings → Environment Variables** (Production, and Preview if you use previews): `APP_ENV=production` (or `staging`), `MONGODB_URI` (add `maxPoolSize=3` to its query string: every instance of each of the 9 functions has its own pool), `AUTH_TOKEN_SECRET`, `WEB_APP_URL` (the deployed web app), `CRON_SECRET` (both secrets: `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`).
 3. **MongoDB Atlas → Network Access:** Vercel functions have no fixed IP addresses on Hobby/Pro, so allow `0.0.0.0/0` and rely on the database user's password (use a strong one).
 4. Deploy (every push to `main` deploys production; other branches get preview URLs). Check `https://<project>.vercel.app/health`.
 5. To load the demo company once: `pnpm db:seed` locally with the production `MONGODB_URI` and `APP_ENV=staging` (seeding refuses `production`).

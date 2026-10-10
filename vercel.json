@@ -3,10 +3,24 @@
   "installCommand": "npx --yes pnpm@11.25.0 install --frozen-lockfile",
   "regions": ["pdx1"],
   "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/api"
-    }
+    { "source": "/auth/(.*)", "destination": "/api/identity" },
+    { "source": "/me", "destination": "/api/identity" },
+    { "source": "/me/(.*)", "destination": "/api/identity" },
+    { "source": "/company/(.*)", "destination": "/api/organization" },
+    { "source": "/departments", "destination": "/api/organization" },
+    { "source": "/departments/(.*)", "destination": "/api/organization" },
+    { "source": "/employees", "destination": "/api/organization" },
+    { "source": "/employees/(.*)", "destination": "/api/organization" },
+    { "source": "/files/(.*)", "destination": "/api/organization" },
+    { "source": "/attendance/(.*)", "destination": "/api/attendance" },
+    { "source": "/leave/(.*)", "destination": "/api/leave" },
+    { "source": "/requests", "destination": "/api/requests" },
+    { "source": "/requests/(.*)", "destination": "/api/requests" },
+    { "source": "/calendar/(.*)", "destination": "/api/calendar" },
+    { "source": "/dashboard/(.*)", "destination": "/api/reporting" },
+    { "source": "/reports/(.*)", "destination": "/api/reporting" },
+    { "source": "/history/(.*)", "destination": "/api/history" },
+    { "source": "/(.*)", "destination": "/api/system" }
   ],
   "crons": [
     {
