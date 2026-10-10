@@ -2,7 +2,7 @@
 
 API for **Stampd**, the Employee Ops Platform (attendance, leave, requests and approvals for GCC teams).
 
-**Status:** BE-01 (foundation), BE-02 (authentication, company signup, tenant isolation) BE-03 (roles, data scopes, permission checks), BE-04 (change history), BE-05 (company settings, work calendar, holidays, image uploads) BE-06 (departments, employee management, offboarding) BE-07 (attendance: check-in/out, daily status, end-of-day close, corrections) BE-08 (leave types, policies, balance ledger) BE-09 (the request & approval engine) BE-10 (leave requests) and BE-11 (WFH, attendance correction, permission and business trip requests) are in place. Endpoints: health, signup, login, sessions, invitations, password reset, current user, change password, a record's history, settings, calendar, holidays, logo and photo uploads, departments, employees, attendance, leave types and balances, requests and approvals (table below). BE-03 adds no endpoints; it adds the checks every later endpoint uses. The other business endpoints arrive with BE-12 … BE-15.
+**Status:** BE-01 (foundation), BE-02 (authentication, company signup, tenant isolation) BE-03 (roles, data scopes, permission checks), BE-04 (change history), BE-05 (company settings, work calendar, holidays, image uploads) BE-06 (departments, employee management, offboarding) BE-07 (attendance: check-in/out, daily status, end-of-day close, corrections) BE-08 (leave types, policies, balance ledger) BE-09 (the request & approval engine) BE-10 (leave requests) BE-11 (WFH, attendance correction, permission and business trip requests) and BE-12 (company calendar and availability) are in place. Endpoints: health, signup, login, sessions, invitations, password reset, current user, change password, a record's history, settings, calendar, holidays, logo and photo uploads, departments, employees, attendance, leave types and balances, requests and approvals (table below). BE-03 adds no endpoints; it adds the checks every later endpoint uses. The other business endpoints arrive with BE-13 … BE-15.
 
 **Stack:** TypeScript · Express 5 · MongoDB · Mongoose · Zod. Those three (express, mongoose, zod) are the only runtime dependencies. Node 24, pnpm.
 
@@ -87,8 +87,10 @@ curl -s -X POST http://localhost:4000/auth/login -H 'content-type: application/j
 | POST                  | `/requests/{id}/approve`, `/reject`, `/withdraw`, `/cancellation`, `/cancellation/approve`, `/cancellation/decline`, `/cancel` | bearer                               | `200` detail; `409 REQUEST_STATUS_CONFLICT` when someone acted first                                                           | BE-09  |
 | POST                  | `/leave/requests/preview`                                                                                                      | bearer                               | `200` days, excluded days, balance before/after, problems, conflicts, who else is off                                          | BE-10  |
 | GET                   | `/leave/employees/{id}/requests`                                                                                               | bearer                               | `200 { items, meta }`: leave history (self / team / company)                                                                   | BE-10  |
+| GET                   | `/calendar/events?from&to`                                                                                                     | bearer                               | `200 { from, to, events }`: approved leave, WFH, trips, permissions and holidays as the caller may see them (≤ 3 months)       | BE-12  |
+| GET                   | `/calendar/availability?from&to`                                                                                               | bearer                               | `200 { from, to, days }`: per-day out / WFH / in-office counts                                                                 | BE-12  |
 
-Each ticket adds its endpoints to this table. The exact request and response bodies and error codes of every endpoint are on its Trello ticket (BE-02 for the identity endpoints, BE-04 for history, BE-05 for settings, holidays, calendar and uploads, BE-06 for departments and employees, BE-07 for attendance, BE-08 for leave types and balances, BE-09 for requests, BE-10 for leave requests).
+Each ticket adds its endpoints to this table. The exact request and response bodies and error codes of every endpoint are on its Trello ticket (BE-02 for the identity endpoints, BE-04 for history, BE-05 for settings, holidays, calendar and uploads, BE-06 for departments and employees, BE-07 for attendance, BE-08 for leave types and balances, BE-09 for requests, BE-10 for leave requests, BE-11 for the other request types, BE-12 for the calendar).
 
 ## Scripts
 
@@ -155,6 +157,7 @@ src/
                             (registry.ts); Leave lives in leave/ (BE-10)
                             request-types.ts: WFH, correction,            (BE-11)
                             permission, business trip
+    calendar/               calendar feed and availability (read-only)    (BE-12)
     reporting/ notifications/                                             (BE-13 … BE-15)
   platform/storage/files.ts image uploads: type check, storage, signed URLs (BE-05)
   platform/jobs.ts          background jobs started by server.ts (BE-07)
@@ -299,6 +302,18 @@ How the engine behaves:
   - approved requests become attendance day effects (BE-07);
   - adding a holiday lists the approved requests on its dates (BE-05);
   - offboarding withdraws pending requests and cancels future approved ones, running each type's `onCancel` (BE-06).
+
+**Calendar (BE-12).** `src/modules/calendar/calendar.service.ts` reads approved requests (`APPROVED`, `CANCELLATION_REQUESTED`) and holidays for up to 3 months. Rejected, withdrawn and cancelled requests never appear, and attendance actuals (late, absent) are not part of the calendar.
+
+| Viewer   | Sees                                                                                                                                           |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Admin    | everyone, in full detail                                                                                                                       |
+| Manager  | themselves and their direct reports in full detail; nothing about other teams                                                                  |
+| Employee | themselves in full; same-department colleagues as name + `OUT` (leave) or `WFH` only; never colleagues' trips, permissions or pending requests |
+
+- `includePending=true` adds pending requests as `tentative` for the people the caller sees in detail.
+- Filters: `departmentId`, `team=true` (the caller's direct reports), `employeeId`, `type`.
+- **Availability:** counts people expected each working day (joined, not past their last day, not invited) as out (leave, or a trip the viewer may see), WFH, or in the office. A colleague's trip counts as in the office for an Employee, so it's never revealed.
 
 **Workplace requests (BE-11).** Four types in `src/modules/requests/request-types.ts`, registered with no engine changes:
 
@@ -517,7 +532,8 @@ Which calendar day an instant falls on depends on the company timezone: use `pla
   - leave (BE-08): every acceptance criterion, including six parallel requests against one balance (fails without the lock);
   - requests (BE-09): every acceptance criterion with two test-only request types, including two simultaneous approvals, the sole-Admin exception, and the attendance, holiday and offboarding connections;
   - leave requests (BE-10): every acceptance criterion (2 of 3 days, overlap, holiday excluded, half day, no working days, 40 days back, On Leave in attendance and back after cancelling) and the colleague privacy rule;
-  - workplace requests (BE-11): every acceptance criterion, including a permission excusing a 10:45 check-in, an Admin-approved correction with its history, and turning a type off.
+  - workplace requests (BE-11): every acceptance criterion, including a permission excusing a 10:45 check-in, an Admin-approved correction with its history, and turning a type off;
+  - calendar (BE-12): every acceptance criterion, with two teams and two departments so each privacy boundary is checked.
 
 ## CI
 
