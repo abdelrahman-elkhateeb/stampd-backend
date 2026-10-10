@@ -1,8 +1,6 @@
 import { withTransaction } from "../../platform/db/connection.ts"
-import { publish } from "../../platform/events.ts"
 import { apiErrors, type FieldError } from "../../platform/http/errors.ts"
 import { toFieldErrors } from "../../platform/http/validation.ts"
-import type { Logger } from "../../platform/logging/logger.ts"
 import type { Clock } from "../../platform/time/clock.ts"
 import { addDays, type PlainDate } from "../../platform/time/time.ts"
 import { registerDayEffectsProvider } from "../attendance/day-effects.ts"
@@ -42,9 +40,9 @@ import { RequestModel, type RequestStatus } from "./request.model.ts"
  * The request & approval engine (Trello BE-09): submission, the lifecycle,
  * who decides, first-decision-wins, cancellations, lists and detail. Every
  * status change runs the type's effect hook and writes history (BE-04) in
- * one transaction, then publishes a domain event (BE-15).
+ * one transaction.
  */
-export type Deps = { clock: Clock; logger?: Logger }
+export type Deps = { clock: Clock }
 
 /** Statuses during which an approved request is in effect. */
 const IN_EFFECT: RequestStatus[] = ["APPROVED", "CANCELLATION_REQUESTED"]
@@ -109,29 +107,6 @@ const statusConflict = (status: string) =>
   apiErrors.conflictWith(
     "REQUEST_STATUS_CONFLICT",
     `The request is ${status} now; refresh and try again`
-  )
-
-const publishLater = (
-  deps: Deps,
-  name: string,
-  record: RequestRecord,
-  actor: HistoryActor
-) =>
-  publish(
-    {
-      name,
-      companyId: record.companyId,
-      at: deps.clock.now(),
-      payload: {
-        requestId: record.id,
-        type: record.type,
-        requesterId: record.requesterId,
-        status: record.status,
-        actorId: actor.type === "USER" ? actor.userId : null,
-      },
-    },
-    (error, event) =>
-      deps.logger?.error("event handler failed", { event: event.name, error })
   )
 
 // ─────────────────────────────── who decides ───────────────────────────────
@@ -211,7 +186,6 @@ async function transition(
     actor: HistoryActor
     reason?: string | null
     hook?: (ctx: HookContext, before: RequestRecord) => Promise<void>
-    event: string
   },
   deps: Deps
 ): Promise<RequestRecord> {
@@ -254,7 +228,6 @@ async function transition(
     )
     return after
   })
-  await publishLater(deps, input.event, record, input.actor)
   return record
 }
 
@@ -285,7 +258,6 @@ export async function approveRequest(
       actor: approverActor(input.auth),
       reason: input.comment,
       hook: (ctx) => definition.onApprove?.(ctx) ?? Promise.resolve(),
-      event: "request.approved",
     },
     deps
   )
@@ -319,7 +291,6 @@ export async function rejectRequest(
       actor: approverActor(input.auth),
       reason: input.reason,
       hook: (ctx) => definition.onReject?.(ctx) ?? Promise.resolve(),
-      event: "request.rejected",
     },
     deps
   )
@@ -344,7 +315,6 @@ export async function withdrawRequest(
       actor: { type: "USER", userId: input.auth.userId },
       hook: (ctx) =>
         definition.onCancel?.({ ...ctx, from: "PENDING" }) ?? Promise.resolve(),
-      event: "request.withdrawn",
     },
     deps
   )
@@ -381,7 +351,6 @@ export async function requestCancellation(
       },
       actor: { type: "USER", userId: input.auth.userId },
       reason: input.reason,
-      event: "request.cancellationRequested",
     },
     deps
   )
@@ -415,7 +384,6 @@ export async function decideCancellation(
           hook: (ctx) =>
             definition.onCancel?.({ ...ctx, from: "CANCELLATION_REQUESTED" }) ??
             Promise.resolve(),
-          event: "request.cancelled",
         },
         deps
       )
@@ -427,7 +395,6 @@ export async function decideCancellation(
           to: "APPROVED",
           actor: approverActor(input.auth),
           reason: input.comment,
-          event: "request.cancellationDeclined",
         },
         deps
       )
@@ -466,7 +433,6 @@ export async function cancelRequest(
           ...ctx,
           from: before.status as "APPROVED" | "CANCELLATION_REQUESTED",
         }) ?? Promise.resolve(),
-      event: "request.cancelled",
     },
     deps
   )
@@ -680,9 +646,6 @@ export async function submitRequest(
     )
     return saved
   })
-  await publishLater(deps, "request.submitted", record, actor)
-  if (request.approved)
-    await publishLater(deps, "request.approved", record, actor)
   return record
 }
 
@@ -781,8 +744,6 @@ async function toViews(auth: AuthContext, docs: RequestDoc[], deps: Deps) {
     })
   )
 }
-
-export type RequestView = Awaited<ReturnType<typeof toViews>>[number]
 
 /** One request with its approval timeline (from history, BE-04). */
 export async function getRequestDetail(
@@ -1132,7 +1093,6 @@ export function integrateRequestEngine(): void {
             hook: (ctx) =>
               definition?.onCancel?.({ ...ctx, from: "PENDING" }) ??
               Promise.resolve(),
-            event: "request.withdrawn",
           },
           deps
         )
@@ -1156,7 +1116,6 @@ export function integrateRequestEngine(): void {
                 ...ctx,
                 from: before.status as "APPROVED" | "CANCELLATION_REQUESTED",
               }) ?? Promise.resolve(),
-            event: "request.cancelled",
           },
           deps
         )

@@ -8,17 +8,12 @@ import { requestContext } from "./platform/http/request-context.ts"
 import { jobsRouter } from "./platform/jobs.ts"
 import type { Logger } from "./platform/logging/logger.ts"
 import { systemClock, type Clock } from "./platform/time/clock.ts"
-import {
-  noopErrorReporter,
-  type ErrorReporter,
-} from "./platform/monitoring/error-reporter.ts"
 
 export type CreateAppOptions = {
   config: Config
   logger: Logger
   /** Health check for the database; server.ts passes pingDatabase. */
   checkDatabase: () => Promise<boolean>
-  errorReporter?: ErrorReporter
   /** Defaults to every domain module (src/modules/index.ts). */
   modules?: readonly AppModule[]
   /** Defaults to the system clock; tests pass a clock they can move. */
@@ -69,6 +64,6 @@ export function createApp(options: CreateAppOptions): Express {
   }
 
   app.use(notFoundHandler)
-  app.use(errorHandler(options.errorReporter ?? noopErrorReporter))
+  app.use(errorHandler)
   return app
 }

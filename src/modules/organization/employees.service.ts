@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 
 import { withTransaction } from "../../platform/db/connection.ts"
+import { escapeRegex } from "../../platform/db/schema.ts"
 import { apiErrors, type FieldError } from "../../platform/http/errors.ts"
 import type { Clock } from "../../platform/time/clock.ts"
 import type { PlainDate } from "../../platform/time/time.ts"
@@ -168,9 +169,6 @@ export type EmployeeFilters = {
   statuses?: UserStatus[]
   roles?: Role[]
 }
-
-const escapeRegex = (text: string) =>
-  text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
 /**
  * A page of employees. `visibleIds` is the caller's scope from BE-03

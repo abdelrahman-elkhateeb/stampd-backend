@@ -18,7 +18,6 @@
  */
 
 export type PlainDate = string
-export type Timestamp = string
 
 const PLAIN_DATE = /^(\d{4})-(\d{2})-(\d{2})$/
 
@@ -34,12 +33,6 @@ export function isPlainDate(value: unknown): value is PlainDate {
     date.getUTCMonth() === m - 1 &&
     date.getUTCDate() === d
   )
-}
-
-/** An instant as a UTC ISO 8601 timestamp with Z. */
-export function toTimestamp(instant: Date): Timestamp {
-  if (Number.isNaN(instant.getTime())) throw new RangeError("Invalid Date")
-  return instant.toISOString()
 }
 
 /** The calendar day an instant falls on in a timezone (IANA name). */

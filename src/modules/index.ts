@@ -4,7 +4,6 @@ import { historyModule } from "./history/index.ts"
 import { identityModule } from "./identity/index.ts"
 import { leaveModule } from "./leave/index.ts"
 import type { AppModule } from "./module.ts"
-import { notificationsModule } from "./notifications/index.ts"
 import { organizationModule } from "./organization/index.ts"
 import { reportingModule } from "./reporting/index.ts"
 import { requestsModule } from "./requests/index.ts"
@@ -20,6 +19,5 @@ export const MODULES: readonly AppModule[] = [
   requestsModule,
   calendarModule,
   reportingModule,
-  notificationsModule,
   historyModule,
 ]

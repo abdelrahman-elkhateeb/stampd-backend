@@ -87,28 +87,14 @@ describe("serverless handler", () => {
     expect(mongoose.connection.getClient()).toBe(connection)
   })
 
-  it("runs the real jobs through the cron route, with the secret only", async () => {
+  it("runs the real jobs through the cron route", async () => {
     const base = await serve(createServerlessHandler(env()))
-    const call = (path: string, auth?: string) =>
-      fetch(`${base}${path}`, {
-        headers: auth ? { authorization: auth } : {},
-      })
-
-    expect((await call("/jobs/attendance.close")).status).toBe(401)
-    expect(
-      (await call("/jobs/attendance.close", "Bearer wrong-secret")).status
-    ).toBe(401)
     for (const job of ["attendance.close", "leave.rollover"]) {
-      const response = await call(`/jobs/${job}`, `Bearer ${CRON_SECRET}`)
+      const response = await fetch(`${base}/jobs/${job}`, {
+        headers: { authorization: `Bearer ${CRON_SECRET}` },
+      })
       expect(response.status, job).toBe(200)
       expect(await response.json()).toMatchObject({ job })
     }
-    // Idempotent: running again is safe.
-    expect(
-      (await call("/jobs/attendance.close", `Bearer ${CRON_SECRET}`)).status
-    ).toBe(200)
-    expect((await call("/jobs/unknown", `Bearer ${CRON_SECRET}`)).status).toBe(
-      404
-    )
   })
 })

@@ -1,5 +1,6 @@
 import { model, Schema } from "mongoose"
 
+import { escapeRegex } from "../../platform/db/schema.ts"
 import type { Clock } from "../../platform/time/clock.ts"
 
 /**
@@ -78,6 +79,6 @@ export async function clearAttempts(key: string): Promise<void> {
 /** Clears an email's login counters from every IP (after a password reset). */
 export async function clearLoginAttemptsForEmail(email: string): Promise<void> {
   // Escape regex characters in the email (".", "+"), then match the prefix.
-  const prefix = `login:${email}|`.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  const prefix = escapeRegex(`login:${email}|`)
   await AttemptModel.deleteMany({ _id: { $regex: `^${prefix}` } })
 }

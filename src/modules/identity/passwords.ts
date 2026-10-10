@@ -4,6 +4,7 @@ import {
   timingSafeEqual,
   type ScryptOptions,
 } from "node:crypto"
+import { promisify } from "node:util"
 
 import type { FieldErrorCode } from "../../platform/http/errors.ts"
 import { COMMON_PASSWORDS } from "./common-passwords.ts"
@@ -17,17 +18,14 @@ const COST = { N: 32_768, r: 8, p: 1 }
 const KEY_LENGTH = 64
 const MAX_MEM = 128 * 1024 * 1024
 
-function scrypt(
+const scryptAsync = promisify(scryptCallback) as (
   password: string,
   salt: Buffer,
+  keyLength: number,
   options: ScryptOptions
-): Promise<Buffer> {
-  return new Promise((resolve, reject) =>
-    scryptCallback(password, salt, KEY_LENGTH, options, (error, key) =>
-      error ? reject(error) : resolve(key)
-    )
-  )
-}
+) => Promise<Buffer>
+const scrypt = (password: string, salt: Buffer, options: ScryptOptions) =>
+  scryptAsync(password, salt, KEY_LENGTH, options)
 
 export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16)

@@ -114,18 +114,6 @@ export async function listDirectReportIds(input: {
   return reports.map((report) => report._id)
 }
 
-/** Ids of the employees in a department. */
-export async function listDepartmentMemberIds(input: {
-  departmentId: string
-  companyId: string
-}): Promise<string[]> {
-  const members = await EmployeeModel.find(
-    { companyId: input.companyId, departmentId: input.departmentId },
-    { _id: 1 }
-  ).lean()
-  return members.map((member) => member._id)
-}
-
 export type ReportingLineResult =
   | "UPDATED"
   | "NOT_FOUND"

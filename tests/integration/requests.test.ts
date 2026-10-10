@@ -4,7 +4,6 @@ import { z } from "zod"
 import { HistoryEntryModel } from "../../src/modules/history/history.model.ts"
 import { registerRequestType } from "../../src/modules/requests/registry.ts"
 import { RequestModel } from "../../src/modules/requests/request.model.ts"
-import { subscribe, type DomainEvent } from "../../src/platform/events.ts"
 import { apiErrors } from "../../src/platform/http/errors.ts"
 import { useApi } from "./api.ts"
 import { useTestDatabase } from "./database.ts"
@@ -35,7 +34,6 @@ type Page = { items: View[]; meta: { totalItems: number } }
 
 /** What the types' effect hooks saw, in order. */
 const calls: string[] = []
-const events: DomainEvent[] = []
 let cleanup: (() => void)[] = []
 
 beforeAll(() => {
@@ -72,13 +70,11 @@ beforeAll(() => {
       data: z.object({}),
       colleagueVisibility: "HIDDEN",
     }),
-    subscribe("*", (event) => void events.push(event)),
   ]
 })
 afterAll(() => cleanup.forEach((undo) => undo()))
 beforeEach(() => {
   calls.length = 0
-  events.length = 0
 })
 
 const travelTo = (instant: string) =>
@@ -129,7 +125,6 @@ describe("submitting", () => {
     })
     const id = submitted.body.id
     expect(calls).toEqual([`submit:${id}`])
-    expect(events.map((e) => e.name)).toEqual(["request.submitted"])
 
     expect(await approvals(o.b)).toEqual([id])
     expect(await approvals(o.admin)).toContain(id)

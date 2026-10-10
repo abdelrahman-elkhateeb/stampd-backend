@@ -5,7 +5,6 @@ import {
   isPlainDate,
   isTimeZone,
   plainDateInZone,
-  toTimestamp,
 } from "../../src/platform/time/time.ts"
 
 describe("plain dates (calendar days)", () => {
@@ -24,15 +23,6 @@ describe("plain dates (calendar days)", () => {
     expect(addDays("2026-12-31", 1)).toBe("2027-01-01")
     expect(addDays("2026-03-01", -1)).toBe("2026-02-28")
     expect(() => addDays("2026-02-30", 1)).toThrow(RangeError)
-  })
-})
-
-describe("timestamps (instants)", () => {
-  it("serialise as UTC ISO 8601 with Z", () => {
-    expect(toTimestamp(new Date(Date.UTC(2026, 9, 7, 12, 30)))).toBe(
-      "2026-10-07T12:30:00.000Z"
-    )
-    expect(() => toTimestamp(new Date("nope"))).toThrow(RangeError)
   })
 })
 

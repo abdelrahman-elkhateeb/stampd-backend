@@ -30,8 +30,6 @@ const configSchema = z
       .string()
       .min(32, "must be at least 32 characters")
       .optional(),
-    /** Set by Vercel on its builds and functions: production | preview | development. */
-    VERCEL_ENV: z.enum(["production", "preview", "development"]).optional(),
   })
   .superRefine((env, ctx) => {
     const deployed = env.APP_ENV === "staging" || env.APP_ENV === "production"
@@ -65,8 +63,6 @@ export type Config = Readonly<{
   webAppUrl: string
   /** null: the scheduled-job route is off (jobs run in-process, server.ts) */
   cronSecret: string | null
-  /** The Vercel environment, or null outside Vercel */
-  vercelEnv: "production" | "preview" | "development" | null
 }>
 
 export class ConfigError extends Error {
@@ -99,17 +95,5 @@ export function loadConfig(
     authTokenSecret: e.AUTH_TOKEN_SECRET,
     webAppUrl: e.WEB_APP_URL.replace(/\/$/, ""),
     cronSecret: e.CRON_SECRET ?? null,
-    vercelEnv: e.VERCEL_ENV ?? null,
   })
-}
-
-/**
- * Only the Vercel environment, without validating the rest: the build decides
- * from it whether to run migrations before any other setting is needed.
- */
-export function vercelEnvironment(
-  env: Record<string, string | undefined> = process.env
-): Config["vercelEnv"] {
-  const parsed = configSchema.shape.VERCEL_ENV.safeParse(env.VERCEL_ENV)
-  return parsed.success ? (parsed.data ?? null) : null
 }

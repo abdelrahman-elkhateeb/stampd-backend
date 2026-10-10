@@ -1,5 +1,5 @@
 import { withTransaction } from "../../platform/db/connection.ts"
-import { withoutTenantScope } from "../../platform/db/tenant.ts"
+import { escapeRegex } from "../../platform/db/schema.ts"
 import { apiErrors } from "../../platform/http/errors.ts"
 import type { Clock } from "../../platform/time/clock.ts"
 import type { PlainDate } from "../../platform/time/time.ts"
@@ -87,7 +87,7 @@ export async function findAccountIds(input: {
   statuses?: UserStatus[]
   emailContains?: string
 }): Promise<string[]> {
-  const escaped = input.emailContains?.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  const escaped = input.emailContains && escapeRegex(input.emailContains)
   const users = await UserModel.find(
     {
       companyId: input.companyId,
@@ -131,15 +131,6 @@ export async function createInvitedAccount(input: {
     if (isDuplicateEmail(error)) throw emailTaken()
     throw error
   }
-}
-
-export async function isEmailTaken(email: string): Promise<boolean> {
-  // Cross-tenant on purpose: emails are unique platform-wide.
-  return Boolean(
-    await withoutTenantScope(
-      UserModel.findOne({ email: normalizeEmail(email) }, { _id: 1 })
-    ).lean()
-  )
 }
 
 /** Changes email and/or role. 422 email ALREADY_EXISTS when taken. */

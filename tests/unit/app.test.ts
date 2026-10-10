@@ -1,5 +1,5 @@
 import { Router } from "express"
-import { describe, expect, it, vi } from "vitest"
+import { describe, expect, it } from "vitest"
 import { z } from "zod"
 
 import type { AppModule } from "../../src/modules/module.ts"
@@ -266,8 +266,7 @@ describe("errors", () => {
     })
   })
 
-  it("hides unexpected errors behind INTERNAL_ERROR, logs them and reports them with the request ID", async () => {
-    const reporter = { captureException: vi.fn() }
+  it("hides unexpected errors behind INTERNAL_ERROR, and logs them with the request ID", async () => {
     const { lines, logger } = captureLogs()
     const module = probeModule((router) =>
       router.get(
@@ -280,7 +279,7 @@ describe("errors", () => {
       )
     )
     await withServer(
-      buildTestApp({ modules: [module], errorReporter: reporter, logger }),
+      buildTestApp({ modules: [module], logger }),
       async (url) => {
         const response = await fetch(`${url}/probe`, {
           headers: { "x-request-id": "boom-1" },
@@ -294,11 +293,6 @@ describe("errors", () => {
         expect(text).not.toMatch(/secret_collection|srv|E11000|stack/)
       }
     )
-    expect(reporter.captureException).toHaveBeenCalledWith(expect.any(Error), {
-      requestId: "boom-1",
-      method: "GET",
-      path: "/probe",
-    })
     const logged = lines.find((l) => l.msg === "request failed")
     expect(logged).toMatchObject({ level: "error", requestId: "boom-1" })
     expect(JSON.stringify(logged)).toContain("secret_collection") // details stay in the logs
