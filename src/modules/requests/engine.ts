@@ -34,7 +34,7 @@ import {
   type RequestRecord,
   type RequestTypeDefinition,
 } from "./registry.ts"
-import { RequestModel, type RequestStatus } from "./request.model.ts"
+import { IN_EFFECT, RequestModel, type RequestStatus } from "./request.model.ts"
 
 /**
  * The request & approval engine (Trello BE-09): submission, the lifecycle,
@@ -44,8 +44,6 @@ import { RequestModel, type RequestStatus } from "./request.model.ts"
  */
 export type Deps = { clock: Clock }
 
-/** Statuses during which an approved request is in effect. */
-const IN_EFFECT: RequestStatus[] = ["APPROVED", "CANCELLATION_REQUESTED"]
 /** The longest request, in days. */
 export const MAX_REQUEST_DAYS = 366
 

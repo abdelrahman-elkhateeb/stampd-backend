@@ -1,14 +1,10 @@
 import { z } from "zod"
 
-import { isPlainDate } from "../../platform/time/time.ts"
+import { plainDate } from "../../platform/http/validation.ts"
 import { LOCALES, ROLES, USER_STATUSES } from "../identity/user.model.ts"
 import { EMPLOYMENT_TYPES } from "./employee.model.ts"
 
 /** Request bodies of the employee endpoints (Trello BE-06), shared with the CSV import. */
-export const plainDate = z
-  .string()
-  .refine(isPlainDate, "must be a date (YYYY-MM-DD)")
-
 const optionalText = (max: number) =>
   z
     .string()

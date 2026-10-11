@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto"
 
 import { withTransaction } from "../../platform/db/connection.ts"
-import { escapeRegex } from "../../platform/db/schema.ts"
+import { escapeRegex, isDuplicateKey } from "../../platform/db/schema.ts"
 import { apiErrors, type FieldError } from "../../platform/http/errors.ts"
 import type { Clock } from "../../platform/time/clock.ts"
 import type { PlainDate } from "../../platform/time/time.ts"
@@ -312,10 +312,6 @@ async function assertRoleChange(
   }
 }
 
-const isDuplicateCode = (error: unknown) => {
-  const e = error as { code?: number; keyPattern?: Record<string, unknown> }
-  return e?.code === 11000 && Boolean(e.keyPattern?.employeeCode)
-}
 const codeTaken = () =>
   apiErrors.fieldError(
     "employeeCode",
@@ -387,7 +383,7 @@ export async function hireEmployee(
       }
     })
   } catch (error) {
-    if (isDuplicateCode(error)) throw codeTaken()
+    if (isDuplicateKey(error, "employeeCode")) throw codeTaken()
     throw error
   }
   return id
@@ -513,7 +509,7 @@ export async function updateEmployee(
       }
     })
   } catch (error) {
-    if (isDuplicateCode(error)) throw codeTaken()
+    if (isDuplicateKey(error, "employeeCode")) throw codeTaken()
     throw error
   }
 }

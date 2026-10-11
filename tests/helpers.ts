@@ -65,3 +65,14 @@ export async function withServer<T>(
     await new Promise<void>((resolve) => server.close(() => resolve()))
   }
 }
+
+/** For tests: a clock that only moves when told to. */
+export function fixedClock(start = new Date("2026-10-09T08:00:00.000Z")) {
+  let current = start.getTime()
+  return {
+    now: () => new Date(current),
+    advance(ms: number) {
+      current += ms
+    },
+  }
+}

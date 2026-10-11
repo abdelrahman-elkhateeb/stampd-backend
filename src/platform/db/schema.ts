@@ -44,6 +44,12 @@ export function uuidV7(now = Date.now()): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
+/** A MongoDB duplicate-key error (E11000), on `field` when given. */
+export function isDuplicateKey(error: unknown, field?: string): boolean {
+  const e = error as { code?: number; keyPattern?: Record<string, unknown> }
+  return e?.code === 11000 && (!field || Boolean(e.keyPattern?.[field]))
+}
+
 /** Text as a literal inside a MongoDB $regex. */
 export const escapeRegex = (text: string) =>
   text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")

@@ -67,7 +67,7 @@ const leaveMessage = (other: RequestRecord) =>
   `You have leave from ${other.startDate} to ${other.endDate} on these days; withdraw or cancel it first`
 
 /** Recomputes stored attendance days when an approved request starts or stops counting. */
-const recalcAttendance = (ctx: HookContext) =>
+export const recalcAttendance = (ctx: HookContext) =>
   recalculateStoredDays(
     {
       companyId: ctx.request.companyId,

@@ -7,8 +7,7 @@ import {
   toPage,
   toPageRequest,
 } from "../../platform/http/pagination.ts"
-import { route } from "../../platform/http/validation.ts"
-import { isPlainDate } from "../../platform/time/time.ts"
+import { plainDate, route } from "../../platform/http/validation.ts"
 import { requirePermission } from "../identity/access.ts"
 import { getAuth, requireAuth } from "../identity/authenticate.ts"
 import type { AppModule } from "../module.ts"
@@ -31,7 +30,6 @@ import { REQUEST_STATUSES } from "./request.model.ts"
 // WFH, Attendance Correction, Permission and Business Trip (BE-11).
 registerWorkplaceRequestTypes()
 
-const plainDate = z.string().refine(isPlainDate, "must be a date (YYYY-MM-DD)")
 const text = (max: number) => z.string().max(max).nullable().optional()
 
 const submitBody = z.object({

@@ -7,7 +7,6 @@ import {
 } from "../../platform/http/errors.ts"
 import type { Clock } from "../../platform/time/clock.ts"
 import { addDays, type PlainDate } from "../../platform/time/time.ts"
-import { recalculateStoredDays } from "../attendance/attendance.service.ts"
 import type { HistoryActor } from "../history/history.service.ts"
 import type { AuthContext } from "../identity/authenticate.ts"
 import {
@@ -29,6 +28,7 @@ import {
   type HookContext,
   type RequestRecord,
 } from "../requests/registry.ts"
+import { recalcAttendance } from "../requests/request-types.ts"
 import { leaveYearOf, leaveYearRange, type DayAmount } from "./balance-math.ts"
 import {
   deductApprovedDays,
@@ -512,18 +512,6 @@ async function balanceKey(ctx: HookContext) {
     requestId: ctx.request.id,
     actor: ctx.actor as HistoryActor,
   }
-}
-
-async function recalcAttendance(ctx: HookContext) {
-  await recalculateStoredDays(
-    {
-      companyId: ctx.request.companyId,
-      employeeId: ctx.request.requesterId,
-      from: ctx.request.startDate,
-      to: ctx.request.endDate,
-    },
-    ctx.deps
-  )
 }
 
 let registered = false

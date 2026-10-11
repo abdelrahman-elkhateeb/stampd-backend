@@ -1,5 +1,5 @@
 import type { Request, RequestHandler, Response } from "express"
-import type { z } from "zod"
+import { z } from "zod"
 
 import {
   apiErrors,
@@ -7,6 +7,7 @@ import {
   type FieldError,
   type FieldErrorCode,
 } from "./errors.ts"
+import { isPlainDate } from "../time/time.ts"
 
 /**
  * The shared validation mechanism: every endpoint declares Zod schemas for
@@ -21,6 +22,17 @@ import {
  * field error in one 422 VALIDATION_FAILED response. Query and path values
  * arrive as strings, so their schemas use z.coerce for numbers and booleans.
  */
+
+/** A calendar day, "YYYY-MM-DD". */
+export const plainDate = z
+  .string()
+  .refine(isPlainDate, "must be a date (YYYY-MM-DD)")
+
+/** A query flag, "true" or "false" (default). */
+export const booleanFlag = z
+  .enum(["true", "false"])
+  .default("false")
+  .transform((value) => value === "true")
 
 /** Zod issue → the agreed field error code (same mapping the frontend uses). */
 export function fieldCode(issue: z.core.$ZodIssue): FieldErrorCode {

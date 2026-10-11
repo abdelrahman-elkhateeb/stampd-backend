@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import {
-  HistoryEntryModel,
-  HistoryImmutableError,
-} from "../../src/modules/history/history.model.ts"
+import { HistoryEntryModel } from "../../src/modules/history/history.model.ts"
 import {
   recordHistory,
   type RecordHistoryInput,
@@ -16,6 +13,7 @@ import {
   createEmployee,
   setReportingLine,
 } from "../../src/modules/organization/organization.service.ts"
+import { AppendOnlyError } from "../../src/platform/db/append-only.ts"
 import { withTransaction } from "../../src/platform/db/connection.ts"
 import { signupBody, useApi, type Tokens } from "./api.ts"
 import { useTestDatabase } from "./database.ts"
@@ -339,33 +337,33 @@ describe("append-only", () => {
 
     await expect(
       HistoryEntryModel.updateOne(scope, { reason: "x" })
-    ).rejects.toThrow(HistoryImmutableError)
+    ).rejects.toThrow(AppendOnlyError)
     await expect(
       HistoryEntryModel.updateMany(scope, { reason: "x" })
-    ).rejects.toThrow(HistoryImmutableError)
+    ).rejects.toThrow(AppendOnlyError)
     await expect(
       HistoryEntryModel.findOneAndUpdate(scope, { reason: "x" })
-    ).rejects.toThrow(HistoryImmutableError)
+    ).rejects.toThrow(AppendOnlyError)
     await expect(
       HistoryEntryModel.replaceOne(scope, { action: "x" })
-    ).rejects.toThrow(HistoryImmutableError)
+    ).rejects.toThrow(AppendOnlyError)
     await expect(HistoryEntryModel.deleteOne(scope)).rejects.toThrow(
-      HistoryImmutableError
+      AppendOnlyError
     )
     await expect(HistoryEntryModel.deleteMany(scope)).rejects.toThrow(
-      HistoryImmutableError
+      AppendOnlyError
     )
     await expect(HistoryEntryModel.findOneAndDelete(scope)).rejects.toThrow(
-      HistoryImmutableError
+      AppendOnlyError
     )
     await expect(
       HistoryEntryModel.bulkWrite([{ deleteOne: { filter: scope } }])
-    ).rejects.toThrow(HistoryImmutableError)
+    ).rejects.toThrow(AppendOnlyError)
 
     const loaded = await HistoryEntryModel.findOne(scope)
     loaded!.reason = "edited"
-    await expect(loaded!.save()).rejects.toThrow(HistoryImmutableError)
-    await expect(loaded!.deleteOne()).rejects.toThrow(HistoryImmutableError)
+    await expect(loaded!.save()).rejects.toThrow(AppendOnlyError)
+    await expect(loaded!.deleteOne()).rejects.toThrow(AppendOnlyError)
 
     expect(await HistoryEntryModel.findOne(scope).lean()).toMatchObject({
       reason: null,

@@ -43,7 +43,7 @@ import {
   listRequestsForReport,
   type ReportRequest,
 } from "../requests/engine.ts"
-import type { RequestStatus } from "../requests/request.model.ts"
+import { IN_EFFECT, type RequestStatus } from "../requests/request.model.ts"
 
 /**
  * Reports (Trello BE-14): attendance, leave and WFH, each as rows for the
@@ -310,9 +310,6 @@ const datesOf = (from: PlainDate, to: PlainDate) => {
   for (let date = from; date <= to; date = addDays(date, 1)) dates.push(date)
   return dates
 }
-
-/** Requests in effect (approved, or cancellation asked but not decided). */
-const IN_EFFECT: RequestStatus[] = ["APPROVED", "CANCELLATION_REQUESTED"]
 
 /** A calendar covering every request's dates and the range. */
 async function calendarFor(

@@ -8,8 +8,8 @@ import {
   toPage,
   toPageRequest,
 } from "../../platform/http/pagination.ts"
-import { route } from "../../platform/http/validation.ts"
-import { addDays, isPlainDate } from "../../platform/time/time.ts"
+import { plainDate, route } from "../../platform/http/validation.ts"
+import { addDays } from "../../platform/time/time.ts"
 import {
   authorize,
   requirePermission,
@@ -30,7 +30,6 @@ import {
 } from "./attendance.service.ts"
 import { runAttendanceClose } from "./close-job.ts"
 
-const plainDate = z.string().refine(isPlainDate, "must be a date (YYYY-MM-DD)")
 const instant = z.iso
   .datetime({ offset: true })
   .transform((value) => new Date(value))

@@ -29,6 +29,9 @@ export const REQUEST_STATUSES = [
 ] as const
 export type RequestStatus = (typeof REQUEST_STATUSES)[number]
 
+/** Statuses during which an approved request is in effect (cancellation asked but not decided counts). */
+export const IN_EFFECT: RequestStatus[] = ["APPROVED", "CANCELLATION_REQUESTED"]
+
 const requestSchema = new Schema(
   {
     _id: uuidId(),

@@ -8,8 +8,7 @@ import {
   toPage,
   toPageRequest,
 } from "../../platform/http/pagination.ts"
-import { route } from "../../platform/http/validation.ts"
-import { isPlainDate } from "../../platform/time/time.ts"
+import { plainDate, route } from "../../platform/http/validation.ts"
 import { requirePermission } from "../identity/access.ts"
 import { getAuth, requireAuth } from "../identity/authenticate.ts"
 import { USER_STATUSES } from "../identity/user.model.ts"
@@ -37,8 +36,6 @@ import {
   type Report,
   type ReportContext,
 } from "./reports.service.ts"
-
-const plainDate = z.string().refine(isPlainDate, "must be a date (YYYY-MM-DD)")
 
 /** What every report takes: who is in it, the format, and paging/sorting. */
 const reportQuery = <const F extends string>(

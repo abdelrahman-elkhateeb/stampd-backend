@@ -2,14 +2,18 @@ import { Router, type Request } from "express"
 import { z } from "zod"
 
 import { apiErrors } from "../../platform/http/errors.ts"
-import { route } from "../../platform/http/validation.ts"
+import {
+  booleanFlag,
+  plainDate,
+  route,
+} from "../../platform/http/validation.ts"
 import {
   isValidFileSignature,
   loadSignedFile,
   readImageUpload,
   signedFileUrl,
 } from "../../platform/storage/files.ts"
-import { addDays, isPlainDate, isTimeZone } from "../../platform/time/time.ts"
+import { addDays, isTimeZone } from "../../platform/time/time.ts"
 import { authorize, requirePermission } from "../identity/access.ts"
 import { getAuth, requireAuth } from "../identity/authenticate.ts"
 import type { AppModule } from "../module.ts"
@@ -35,12 +39,7 @@ import {
   type CompanySettings,
 } from "./settings.service.ts"
 
-const plainDate = z.string().refine(isPlainDate, "must be a date (YYYY-MM-DD)")
 const localTime = z.string().regex(LOCAL_TIME, "must be a time (HH:mm)")
-const booleanFlag = z
-  .enum(["true", "false"])
-  .default("false")
-  .transform((value) => value === "true")
 
 const settingsBody = z.object({
   name: z.string().trim().min(1).max(120).optional(),

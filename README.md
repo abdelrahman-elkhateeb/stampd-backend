@@ -470,7 +470,7 @@ await withTransaction(async () => {
 
 - **Actions** (`HISTORY_ACTIONS`): each says which record type it changes and whether a reason is **required**. A missing required reason gives `422`, field `reason`, code `REQUIRED`, and the change rolls back. Required today: `attendance.corrected` and `leaveBalance.adjusted`. The ticket that builds a change may add actions or adjust the rule.
 - **Source:** `USER`, `APPROVAL` (pass `source: "APPROVAL"` on the actor) or `SYSTEM_JOB` (actor "system").
-- **Append-only:** every update, replace and delete on the history model throws (`HistoryImmutableError`), and there is no endpoint that writes history.
+- **Append-only:** every update, replace and delete on the history model throws (`AppendOnlyError`), and there is no endpoint that writes history.
 - **Already recorded:** manager and department changes (`setReportingLine`, which now needs `changedBy`) and an invited employee becoming active.
 - **Reading:** `GET /history/{attendance-days|leave-balances|requests|employees|company-settings}/{id}`. You can read a record's history only if you can read the record (BE-03). For attendance days, leave balances and requests, the owner is taken from the entries, so a record with no history is `404`. Company settings use the company id.
 

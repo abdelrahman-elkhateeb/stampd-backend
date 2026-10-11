@@ -57,8 +57,7 @@ export function createApp(options: CreateAppOptions): Express {
   const mounted = (name: string) => options.only?.includes(name) ?? true
   for (const module of modules) {
     if (!mounted(module.name)) continue
-    const router = module.routes(deps)
-    if (router) app.use(router)
+    app.use(module.routes(deps))
   }
   // Serverless hosts run the background jobs through HTTP (Vercel Cron).
   if (config.cronSecret && mounted("jobs")) {

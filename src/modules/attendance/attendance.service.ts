@@ -1,4 +1,5 @@
 import { withTransaction } from "../../platform/db/connection.ts"
+import { isDuplicateKey } from "../../platform/db/schema.ts"
 import { apiErrors } from "../../platform/http/errors.ts"
 import type { Clock } from "../../platform/time/clock.ts"
 import {
@@ -330,9 +331,6 @@ async function recordSessionChange(
   )
 }
 
-const isDuplicateOpen = (error: unknown) =>
-  (error as { code?: number })?.code === 11000
-
 /**
  * Check-in with the server's time. With a session already open (double click,
  * two tabs) nothing new is created and the open one is returned.
@@ -389,7 +387,7 @@ export async function checkIn(
     })
   } catch (error) {
     // A parallel check-in won the race: return the session it opened.
-    if (!isDuplicateOpen(error)) throw error
+    if (!isDuplicateKey(error)) throw error
   }
   return { created, today: await todayFor(companyId, employeeId, deps) }
 }

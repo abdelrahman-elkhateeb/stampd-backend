@@ -30,14 +30,9 @@ const UPDATES =
   /^(updateOne|updateMany|findOneAndUpdate|replaceOne|findOneAndReplace)$/
 const DELETES = /^(deleteOne|deleteMany|findOneAndDelete)$/
 
-export function appendOnly(
-  schema: Schema,
-  options: { what: string; error?: new () => Error }
-): void {
+export function appendOnly(schema: Schema, options: { what: string }): void {
   const fail = () => {
-    throw options.error
-      ? new options.error()
-      : new AppendOnlyError(options.what)
+    throw new AppendOnlyError(options.what)
   }
   schema.pre(UPDATES, { document: false, query: true }, fail)
   schema.pre<Query<unknown, unknown>>(

@@ -1,3 +1,4 @@
+import { Router } from "express"
 import { describe, expect, it } from "vitest"
 
 import type { AppModule } from "../../src/modules/module.ts"
@@ -10,7 +11,7 @@ function appWithJob(cronSecret: string | null) {
   const runs: string[] = []
   const module: AppModule = {
     name: "fake",
-    routes: () => undefined,
+    routes: () => Router(),
     jobs: () => [
       {
         name: "demo.job",

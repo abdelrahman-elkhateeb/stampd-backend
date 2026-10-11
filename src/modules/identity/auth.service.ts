@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 
 import type { Config } from "../../config/env.ts"
 import { withTransaction } from "../../platform/db/connection.ts"
+import { isDuplicateKey } from "../../platform/db/schema.ts"
 import { withoutTenantScope } from "../../platform/db/tenant.ts"
 import { apiErrors } from "../../platform/http/errors.ts"
 import type { Logger } from "../../platform/logging/logger.ts"
@@ -41,11 +42,7 @@ import {
   startSession,
   type AuthTokens,
 } from "./sessions.ts"
-import {
-  emailTaken,
-  isDuplicateEmail,
-  settleAccountStatus,
-} from "./accounts.ts"
+import { emailTaken, settleAccountStatus } from "./accounts.ts"
 import { hashToken, randomToken } from "./tokens.ts"
 import {
   normalizeEmail,
@@ -137,7 +134,7 @@ export async function signup(
       return startSession({ userId, companyId }, sessionDeps(deps))
     })
   } catch (error) {
-    if (isDuplicateEmail(error)) throw emailTaken()
+    if (isDuplicateKey(error, "email")) throw emailTaken()
     throw error
   }
 }

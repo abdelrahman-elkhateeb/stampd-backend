@@ -22,8 +22,8 @@ export type AppDeps = {
  */
 export type AppModule = {
   name: string
-  /** Express router with this module's endpoints, or undefined while it has none */
-  routes(deps: AppDeps): Router | undefined
+  /** Express router with this module's endpoints */
+  routes(deps: AppDeps): Router
   /** Background jobs the server runs (server.ts starts them once MongoDB is connected) */
   jobs?(deps: AppDeps): Job[]
 }

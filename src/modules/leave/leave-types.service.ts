@@ -1,4 +1,5 @@
 import { withTransaction } from "../../platform/db/connection.ts"
+import { isDuplicateKey } from "../../platform/db/schema.ts"
 import { purgeAppendOnly } from "../../platform/db/append-only.ts"
 import { apiErrors } from "../../platform/http/errors.ts"
 import type { Clock } from "../../platform/time/clock.ts"
@@ -172,10 +173,6 @@ const nameTaken = () =>
     "ALREADY_EXISTS",
     "a leave type with this name exists"
   )
-const isDuplicateName = (error: unknown) => {
-  const e = error as { code?: number; keyPattern?: Record<string, unknown> }
-  return e?.code === 11000 && Boolean(e.keyPattern?.nameKey)
-}
 const inUse = (message: string) =>
   apiErrors.conflictWith("LEAVE_TYPE_IN_USE", message)
 
@@ -210,7 +207,7 @@ export async function addLeaveType(
       return view
     })
   } catch (error) {
-    if (isDuplicateName(error)) throw nameTaken()
+    if (isDuplicateKey(error, "nameKey")) throw nameTaken()
     throw error
   }
 }
@@ -276,7 +273,7 @@ export async function changeLeaveType(
       return after
     })
   } catch (error) {
-    if (isDuplicateName(error)) throw nameTaken()
+    if (isDuplicateKey(error, "nameKey")) throw nameTaken()
     throw error
   }
 }

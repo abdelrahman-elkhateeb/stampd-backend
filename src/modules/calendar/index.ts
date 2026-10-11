@@ -2,8 +2,11 @@ import { Router } from "express"
 import { z } from "zod"
 
 import { multiValue } from "../../platform/http/pagination.ts"
-import { route } from "../../platform/http/validation.ts"
-import { isPlainDate } from "../../platform/time/time.ts"
+import {
+  booleanFlag,
+  plainDate,
+  route,
+} from "../../platform/http/validation.ts"
 import { getAuth, requireAuth } from "../identity/authenticate.ts"
 import type { AppModule } from "../module.ts"
 import {
@@ -12,17 +15,11 @@ import {
   EVENT_KINDS,
 } from "./calendar.service.ts"
 
-const plainDate = z.string().refine(isPlainDate, "must be a date (YYYY-MM-DD)")
-const flag = z
-  .enum(["true", "false"])
-  .default("false")
-  .transform((v) => v === "true")
-
 const rangeQuery = z.object({
   from: plainDate,
   to: plainDate,
   departmentId: z.uuid().optional(),
-  team: flag,
+  team: booleanFlag,
   employeeId: z.uuid().optional(),
 })
 
@@ -52,7 +49,7 @@ export const calendarModule: AppModule = {
         {
           query: rangeQuery.extend({
             type: multiValue(z.enum(EVENT_KINDS)).optional(),
-            includePending: flag,
+            includePending: booleanFlag,
           }),
         },
         async ({ query, req }) => ({

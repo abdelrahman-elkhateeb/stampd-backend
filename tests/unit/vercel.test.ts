@@ -23,7 +23,7 @@ describe("vercel.json rewrites", () => {
   it("send every route of every module to that module's function", () => {
     let routes = 0
     for (const module of MODULES) {
-      for (const layer of module.routes(deps)?.stack ?? []) {
+      for (const layer of module.routes(deps).stack) {
         const path = (layer.route?.path as string).replace(/:\w+/g, "x")
         expect(vercelFunctionFor(path), path).toBe(module.name)
         expect(vercelFunctionFor(`${path}/`), `${path}/`).toBe(module.name)

@@ -1,4 +1,5 @@
 import { withTransaction } from "../../platform/db/connection.ts"
+import { isDuplicateKey } from "../../platform/db/schema.ts"
 import { apiErrors } from "../../platform/http/errors.ts"
 import type { Clock } from "../../platform/time/clock.ts"
 import { recordHistory, type HistoryActor } from "../history/history.service.ts"
@@ -19,11 +20,6 @@ const nameTaken = () =>
     "ALREADY_EXISTS",
     "a department with this name exists"
   )
-
-const isDuplicateName = (error: unknown) => {
-  const e = error as { code?: number; keyPattern?: Record<string, unknown> }
-  return e?.code === 11000 && Boolean(e.keyPattern?.nameKey)
-}
 
 async function countMembers(companyId: string, departmentId: string) {
   return EmployeeModel.countDocuments({ companyId, departmentId })
@@ -98,7 +94,7 @@ export async function addDepartment(
       return { id: created!._id, name: created!.name, employeeCount: 0 }
     })
   } catch (error) {
-    if (isDuplicateName(error)) throw nameTaken()
+    if (isDuplicateKey(error, "nameKey")) throw nameTaken()
     throw error
   }
 }
@@ -140,7 +136,7 @@ export async function renameDepartment(
       }
     })
   } catch (error) {
-    if (isDuplicateName(error)) throw nameTaken()
+    if (isDuplicateKey(error, "nameKey")) throw nameTaken()
     throw error
   }
 }

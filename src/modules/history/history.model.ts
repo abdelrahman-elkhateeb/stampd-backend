@@ -53,16 +53,7 @@ const historyEntrySchema = new Schema(
 historyEntrySchema.index({ companyId: 1, entityType: 1, entityId: 1, at: -1 })
 historyEntrySchema.plugin(tenantScoped)
 
-export class HistoryImmutableError extends Error {
-  override readonly name = "HistoryImmutableError"
-  constructor() {
-    super("History entries are append-only: they can't be edited or deleted")
-  }
-}
-historyEntrySchema.plugin(appendOnly, {
-  what: "History entries",
-  error: HistoryImmutableError,
-})
+historyEntrySchema.plugin(appendOnly, { what: "History entries" })
 
 export type HistoryEntry = InferSchemaType<typeof historyEntrySchema>
 

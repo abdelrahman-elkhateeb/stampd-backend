@@ -1,5 +1,5 @@
 import { withTransaction } from "../../platform/db/connection.ts"
-import { escapeRegex } from "../../platform/db/schema.ts"
+import { escapeRegex, isDuplicateKey } from "../../platform/db/schema.ts"
 import { apiErrors } from "../../platform/http/errors.ts"
 import type { Clock } from "../../platform/time/clock.ts"
 import type { PlainDate } from "../../platform/time/time.ts"
@@ -19,11 +19,6 @@ import {
  * email, role, status and offboarding. These functions only write; the
  * caller wraps them in a transaction and records history.
  */
-export function isDuplicateEmail(error: unknown): boolean {
-  const e = error as { code?: number; keyPattern?: Record<string, unknown> }
-  return e?.code === 11000 && Boolean(e.keyPattern?.email)
-}
-
 export const emailTaken = () =>
   apiErrors.fieldError("email", "ALREADY_EXISTS", "email is already registered")
 
@@ -128,7 +123,7 @@ export async function createInvitedAccount(input: {
       },
     ])
   } catch (error) {
-    if (isDuplicateEmail(error)) throw emailTaken()
+    if (isDuplicateKey(error, "email")) throw emailTaken()
     throw error
   }
 }
@@ -152,7 +147,7 @@ export async function updateAccount(input: {
       { runValidators: true }
     )
   } catch (error) {
-    if (isDuplicateEmail(error)) throw emailTaken()
+    if (isDuplicateKey(error, "email")) throw emailTaken()
     throw error
   }
 }

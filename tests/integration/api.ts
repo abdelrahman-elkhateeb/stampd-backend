@@ -6,8 +6,7 @@ import { createApp } from "../../src/app.ts"
 import { MODULES } from "../../src/modules/index.ts"
 import type { AppModule } from "../../src/modules/module.ts"
 import { pingDatabase } from "../../src/platform/db/connection.ts"
-import { fixedClock } from "../../src/platform/time/clock.ts"
-import { captureLogs, testConfig } from "../helpers.ts"
+import { captureLogs, fixedClock, testConfig } from "../helpers.ts"
 import type { Config } from "../../src/config/env.ts"
 
 export type ApiResponse<T = Record<string, unknown>> = {

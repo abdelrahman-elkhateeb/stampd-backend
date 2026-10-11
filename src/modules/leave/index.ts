@@ -7,7 +7,7 @@ import {
   toPage,
   toPageRequest,
 } from "../../platform/http/pagination.ts"
-import { route } from "../../platform/http/validation.ts"
+import { plainDate, route } from "../../platform/http/validation.ts"
 import { authorize, requirePermission } from "../identity/access.ts"
 import { getAuth, requireAuth } from "../identity/authenticate.ts"
 import type { AppModule } from "../module.ts"
@@ -33,7 +33,6 @@ import {
 } from "./leave-request.ts"
 import { listRequestsOf } from "../requests/engine.ts"
 import { REQUEST_STATUSES } from "../requests/request.model.ts"
-import { isPlainDate } from "../../platform/time/time.ts"
 
 // Leave requests run on the request engine (BE-09) as the type "LEAVE".
 registerLeaveRequestType()
@@ -301,9 +300,6 @@ export const leaveModule: AppModule = {
     )
 
     // ── leave requests (submitted with POST /requests, type "LEAVE"; BE-10) ──
-    const plainDate = z
-      .string()
-      .refine(isPlainDate, "must be a date (YYYY-MM-DD)")
     router.post(
       "/leave/requests/preview",
       auth,
