@@ -574,13 +574,13 @@ Which calendar day an instant falls on depends on the company timezone: use `pla
 
 The API also runs on Vercel as **one function**: the same Express routers, middleware and error handling, with no code path of its own. `vercel.json` sends every path to it.
 
-| Piece               | What it does                                                                                                                                                                                                          |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `vercel.json`       | Sends every path to the function (`rewrites`), runs it in `pdx1` (Oregon, next to the Atlas cluster in us-west-2), installs with the pinned pnpm, and schedules the two jobs (the build is the `vercel-build` script) |
-| `api/index.js`      | The function: `createServerlessHandler()` from the compiled `dist/serverless.js`                                                                                                                                      |
-| `src/serverless.ts` | Builds the app once per instance. Each request first makes sure MongoDB is connected (opened on the first request, then reused), then runs the app                                                                    |
-| `GET /jobs/{name}`  | Runs one background job (`attendance.close`, `leave.rollover`). Vercel Cron calls it with `CRON_SECRET`; wrong or missing secret → `401`, unknown job → `404`                                                         |
-| `public/`           | The only static output (`robots.txt` blocks crawlers), so no project file is ever served                                                                                                                              |
+| Piece               | What it does                                                                                                                                                                                                                |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `vercel.json`       | Sends every path to the function (`rewrites`), runs it in `fra1` (Frankfurt, next to the Atlas cluster in eu-central-1), installs with the pinned pnpm, and schedules the two jobs (the build is the `vercel-build` script) |
+| `api/index.js`      | The function: `createServerlessHandler()` from the compiled `dist/serverless.js`                                                                                                                                            |
+| `src/serverless.ts` | Builds the app once per instance. Each request first makes sure MongoDB is connected (opened on the first request, then reused), then runs the app                                                                          |
+| `GET /jobs/{name}`  | Runs one background job (`attendance.close`, `leave.rollover`). Vercel Cron calls it with `CRON_SECRET`; wrong or missing secret → `401`, unknown job → `404`                                                               |
+| `public/`           | The only static output (`robots.txt` blocks crawlers), so no project file is ever served                                                                                                                                    |
 
 **Adding a route or module.** Nothing to do on the Vercel side: every path already reaches the function.
 
