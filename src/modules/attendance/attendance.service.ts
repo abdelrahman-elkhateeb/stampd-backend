@@ -456,12 +456,14 @@ export async function todayFor(
   deps: Deps
 ): Promise<TodayView> {
   const ctx = await personContext(companyId, employeeId, null, null, deps)
-  const sessions = await sessionsOf(companyId, employeeId, ctx.today)
-  const record = await AttendanceDayModel.findOne({
-    companyId,
-    employeeId,
-    date: ctx.today,
-  }).lean()
+  const [sessions, record] = await Promise.all([
+    sessionsOf(companyId, employeeId, ctx.today),
+    AttendanceDayModel.findOne({
+      companyId,
+      employeeId,
+      date: ctx.today,
+    }).lean(),
+  ])
   const result = evaluate(ctx, employeeId, ctx.today, sessions)
   const open = sessions.find((s) => s.open)
   const person = ctx.people.get(employeeId)!

@@ -264,29 +264,56 @@ export async function listBalances(
   input: { companyId: string; employeeId: string; year?: number },
   deps: Deps
 ): Promise<{ year: number; items: BalanceView[] }> {
-  const ctx = await companyContext(input.companyId, deps)
+  const { companyId, employeeId } = input
+  const [ctx, docs] = await Promise.all([
+    companyContext(companyId, deps),
+    LeaveTypeModel.find({ companyId, archived: false })
+      .sort({ nameKey: 1 })
+      .lean(),
+  ])
   const year = input.year ?? leaveYearOf(ctx.today, ctx.startMonth)
-  const types = await LeaveTypeModel.find({
-    companyId: input.companyId,
-    archived: false,
-  })
-    .sort({ nameKey: 1 })
-    .lean()
-  const items: BalanceView[] = []
+  const types = docs.map((t) =>
+    toLeaveTypeView(t as Parameters<typeof toLeaveTypeView>[0])
+  )
+  // Read in bulk: this runs on every dashboard, so queries must not grow per type.
+  const found = await LeaveBalanceModel.find({
+    companyId,
+    employeeId,
+    year,
+    leaveTypeId: {
+      $in: types.filter((t) => t.tracksBalance).map((t) => t.id),
+    },
+  }).lean()
+  const balances = new Map<string, Awaited<ReturnType<typeof ensureBalance>>>(
+    found.map((b) => [b.leaveTypeId, b])
+  )
   for (const type of types) {
-    items.push(
-      await getBalance(
-        {
-          companyId: input.companyId,
-          employeeId: input.employeeId,
-          leaveTypeId: type._id,
-          year,
-        },
+    if (!type.tracksBalance || balances.has(type.id)) continue
+    balances.set(
+      type.id,
+      await ensureBalance(
+        { companyId, employeeId, type, year, startMonth: ctx.startMonth },
         deps
       )
     )
   }
-  return { year, items }
+  const entries = await LeaveLedgerEntryModel.find({
+    companyId,
+    balanceId: { $in: [...balances.values()].map((b) => b._id) },
+  })
+    .sort({ _id: 1 })
+    .lean()
+  const entriesByBalance = Map.groupBy(entries, (e) => e.balanceId)
+  return {
+    year,
+    items: types.map((type) => {
+      const balance = balances.get(type.id) ?? null
+      const summary = balance
+        ? summarize(entriesByBalance.get(balance._id) ?? [], ctx.today)
+        : null
+      return toView(type, year, ctx.startMonth, balance, summary)
+    }),
+  }
 }
 
 /** The ledger of one balance (its "balance history"), oldest first. */

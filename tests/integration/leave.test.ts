@@ -1,8 +1,10 @@
+import mongoose from "mongoose"
 import { describe, expect, it } from "vitest"
 
 import {
   deductApprovedDays,
   getBalance,
+  listBalances,
   releaseReservation,
   reserveDays,
   restoreDays,
@@ -564,5 +566,47 @@ describe("who sees balances", () => {
     expect((await balances(o.admin, o.colleague.id)).status).toBe(200)
     expect((await balances(o.employee, o.colleague.id)).status).toBe(404)
     expect((await balances(o.manager, o.colleague.id)).status).toBe(404)
+  })
+})
+
+describe("listing an employee's balances", () => {
+  it("matches single reads, and queries don't grow with the leave types", async () => {
+    const o = await org("Quebec")
+    const key = { companyId: o.companyId, employeeId: o.employee.id }
+
+    // The first read creates the missing balances.
+    const { year, items } = await listBalances(key, deps)
+    expect(items.map((b) => b.leaveType.name)).toEqual([
+      "Annual",
+      "Emergency",
+      "Sick",
+      "Unpaid",
+    ])
+    expect(items[3]).toMatchObject({ tracked: false, balanceId: null })
+    for (const item of items) {
+      const single = { ...key, leaveTypeId: item.leaveType.id, year }
+      expect(await getBalance(single, deps)).toEqual(item)
+    }
+
+    const countQueries = async () => {
+      let queries = 0
+      mongoose.set("debug", () => {
+        queries += 1
+      })
+      try {
+        await listBalances(key, deps)
+      } finally {
+        mongoose.set("debug", false)
+      }
+      return queries
+    }
+    const before = await countQueries()
+    expect(before).toBeLessThanOrEqual(5)
+    for (const name of ["Hajj", "Study"]) {
+      const body = { name, icon: "hajj", defaultAllowanceDays: 10 }
+      await api.post("/leave/types", body, o.admin.token)
+    }
+    await listBalances(key, deps)
+    expect(await countQueries()).toBe(before)
   })
 })

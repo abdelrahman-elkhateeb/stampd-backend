@@ -159,12 +159,8 @@ async function upcoming(
 // ─────────────────────────────── Employee ───────────────────────────────
 
 export async function employeeSummary(auth: AuthContext, deps: Deps) {
-  const day = await todayFor(auth.companyId, auth.userId, deps)
-  const now = deps.clock.now().getTime()
-  const openMinutes = day.openSession
-    ? Math.floor((now - Date.parse(day.openSession.checkInAt)) / 60_000)
-    : 0
-  const [balances, pending, coming, activity] = await Promise.all([
+  const [day, balances, pending, activity] = await Promise.all([
+    todayFor(auth.companyId, auth.userId, deps),
     listBalances({ companyId: auth.companyId, employeeId: auth.userId }, deps),
     listMyRequests(
       auth,
@@ -172,17 +168,25 @@ export async function employeeSummary(auth: AuthContext, deps: Deps) {
       { skip: 0, limit: 10, mongoSort: { createdAt: -1 } },
       deps
     ),
-    upcoming(auth, [auth.userId], day.date, 30, deps),
     recentEntriesAbout({
       companyId: auth.companyId,
       subjectEmployeeId: auth.userId,
       limit: 10,
     }),
   ])
-  const actorNames = await getEmployeeNames({
-    companyId: auth.companyId,
-    ids: [...new Set(activity.flatMap((a) => (a.actorId ? [a.actorId] : [])))],
-  })
+  const now = deps.clock.now().getTime()
+  const openMinutes = day.openSession
+    ? Math.floor((now - Date.parse(day.openSession.checkInAt)) / 60_000)
+    : 0
+  const [coming, actorNames] = await Promise.all([
+    upcoming(auth, [auth.userId], day.date, 30, deps),
+    getEmployeeNames({
+      companyId: auth.companyId,
+      ids: [
+        ...new Set(activity.flatMap((a) => (a.actorId ? [a.actorId] : []))),
+      ],
+    }),
+  ])
   return {
     today: {
       date: day.date,
