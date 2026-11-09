@@ -659,17 +659,14 @@ export type RequestAction =
   | "CANCEL"
 
 /** What the caller may do with the request now (for buttons; the server checks again). */
-async function actionsFor(
+function actionsFor(
   auth: AuthContext,
   doc: RequestDoc,
-  today: PlainDate
-): Promise<RequestAction[]> {
-  const definition = getRequestType(doc.type)
+  today: PlainDate,
+  right: DecisionRight | null
+): RequestAction[] {
   const actions: RequestAction[] = []
   const own = doc.requesterId === auth.userId
-  const right = definition
-    ? await decisionRight(auth, toRecord(doc), definition)
-    : null
   if (doc.status === "PENDING") {
     if (right) actions.push("APPROVE", "REJECT")
     if (own) actions.push("WITHDRAW")
@@ -690,57 +687,62 @@ async function actionsFor(
 }
 
 async function toViews(auth: AuthContext, docs: RequestDoc[], deps: Deps) {
+  if (!docs.length) return []
   const ids = new Set<string>()
   for (const d of docs) {
     for (const id of [d.requesterId, d.createdBy, d.decidedBy, d.cancelledBy])
       if (id) ids.add(id)
   }
-  const [names, today] = await Promise.all([
+  const [names, today, rights] = await Promise.all([
     getEmployeeNames({ companyId: auth.companyId, ids: [...ids] }),
     companyToday(auth.companyId, deps),
+    Promise.all(
+      docs.map((d) => {
+        const definition = getRequestType(d.type)
+        return definition ? decisionRight(auth, toRecord(d), definition) : null
+      })
+    ),
   ])
   const person = (id: string | null | undefined) =>
     id ? { id, name: names.get(id) ?? null } : null
-  return Promise.all(
-    docs.map(async (d) => {
-      const definition = getRequestType(d.type)
-      return {
-        id: d._id,
-        type: d.type,
-        typeLabel: definition?.label ?? d.type,
-        requester: person(d.requesterId)!,
-        startDate: d.startDate!,
-        endDate: d.endDate!,
-        startTime: d.startTime ?? null,
-        endTime: d.endTime ?? null,
-        reason: d.reason ?? null,
-        data: (d.data ?? {}) as Record<string, unknown>,
-        status: d.status as RequestStatus,
-        approverPolicy: definition?.approverPolicy ?? null,
-        createdBy: person(d.createdBy)!,
-        createdAt: d.createdAt?.toISOString() ?? null,
-        submittedAt: (d.submittedAt ?? d.createdAt)?.toISOString() ?? null,
-        decision: d.decidedBy
+  return docs.map((d, i) => {
+    const definition = getRequestType(d.type)
+    return {
+      id: d._id,
+      type: d.type,
+      typeLabel: definition?.label ?? d.type,
+      requester: person(d.requesterId)!,
+      startDate: d.startDate!,
+      endDate: d.endDate!,
+      startTime: d.startTime ?? null,
+      endTime: d.endTime ?? null,
+      reason: d.reason ?? null,
+      data: (d.data ?? {}) as Record<string, unknown>,
+      status: d.status as RequestStatus,
+      approverPolicy: definition?.approverPolicy ?? null,
+      createdBy: person(d.createdBy)!,
+      createdAt: d.createdAt?.toISOString() ?? null,
+      submittedAt: (d.submittedAt ?? d.createdAt)?.toISOString() ?? null,
+      decision: d.decidedBy
+        ? {
+            by: person(d.decidedBy)!,
+            at: d.decidedAt?.toISOString() ?? null,
+            comment: d.decisionComment ?? null,
+            selfApproved: Boolean(d.selfApproved),
+          }
+        : null,
+      cancellation:
+        d.cancellationRequestedAt || d.cancelledAt
           ? {
-              by: person(d.decidedBy)!,
-              at: d.decidedAt?.toISOString() ?? null,
-              comment: d.decisionComment ?? null,
-              selfApproved: Boolean(d.selfApproved),
+              requestedAt: d.cancellationRequestedAt?.toISOString() ?? null,
+              reason: d.cancellationReason ?? null,
+              cancelledBy: person(d.cancelledBy),
+              cancelledAt: d.cancelledAt?.toISOString() ?? null,
             }
           : null,
-        cancellation:
-          d.cancellationRequestedAt || d.cancelledAt
-            ? {
-                requestedAt: d.cancellationRequestedAt?.toISOString() ?? null,
-                reason: d.cancellationReason ?? null,
-                cancelledBy: person(d.cancelledBy),
-                cancelledAt: d.cancelledAt?.toISOString() ?? null,
-              }
-            : null,
-        actions: await actionsFor(auth, d, today),
-      }
-    })
-  )
+      actions: actionsFor(auth, d, today, rights[i] ?? null),
+    }
+  })
 }
 
 /** One request with its approval timeline (from history, BE-04). */
