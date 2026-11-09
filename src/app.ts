@@ -16,12 +16,6 @@ export type CreateAppOptions = {
   checkDatabase: () => Promise<boolean>
   /** Defaults to every domain module (src/modules/index.ts). */
   modules?: readonly AppModule[]
-  /**
-   * Mount only these modules' routes ("jobs": the scheduled-job routes).
-   * Defaults to everything; each Vercel function mounts its own part
-   * (src/serverless.ts).
-   */
-  only?: readonly string[]
   /** Defaults to the system clock; tests pass a clock they can move. */
   clock?: Clock
 }
@@ -54,13 +48,11 @@ export function createApp(options: CreateAppOptions): Express {
     clock: options.clock ?? systemClock,
   }
   const modules = options.modules ?? MODULES
-  const mounted = (name: string) => options.only?.includes(name) ?? true
   for (const module of modules) {
-    if (!mounted(module.name)) continue
     app.use(module.routes(deps))
   }
   // Serverless hosts run the background jobs through HTTP (Vercel Cron).
-  if (config.cronSecret && mounted("jobs")) {
+  if (config.cronSecret) {
     app.use(
       jobsRouter({
         jobs: modules.flatMap((module) => module.jobs?.(deps) ?? []),

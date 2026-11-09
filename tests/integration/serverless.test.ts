@@ -5,15 +5,11 @@ import { afterAll, afterEach, describe, expect, inject, it } from "vitest"
 
 import { disconnectDatabase } from "../../src/platform/db/connection.ts"
 import { runMigrations } from "../../src/platform/db/migrations.ts"
-import {
-  createServerlessHandler,
-  type ServerlessHandler,
-} from "../../src/serverless.ts"
-import { vercelFunctionFor } from "../helpers.ts"
+import { createServerlessHandler } from "../../src/serverless.ts"
 import { signupBody } from "./api.ts"
 
 /**
- * The Vercel entry point: one request handler per module, each connecting to
+ * The Vercel entry point: one request handler for the whole app, connecting to
  * MongoDB itself (no useTestDatabase here: the handler must connect).
  */
 const CRON_SECRET = "cron-secret-0123456789abcdefghijklmnop"
@@ -27,16 +23,9 @@ const env = (overrides: Record<string, string> = {}) => ({
 })
 
 let server: Server | undefined
-/** Like Vercel: each request goes to the function vercel.json rewrites its path to. */
 async function serve(env: Record<string, string>) {
-  const functions = new Map<string, ServerlessHandler>()
-  server = createServer((req, res) => {
-    const name = vercelFunctionFor(req.url!.split("?")[0]!)
-    if (!functions.has(name)) {
-      functions.set(name, createServerlessHandler(name, env))
-    }
-    void functions.get(name)!(req, res)
-  })
+  const handler = createServerlessHandler(env)
+  server = createServer((req, res) => void handler(req, res))
   await new Promise<void>((resolve) => server!.listen(0, "127.0.0.1", resolve))
   return `http://127.0.0.1:${(server.address() as AddressInfo).port}`
 }
@@ -49,18 +38,13 @@ afterAll(async () => {
 })
 
 describe("serverless handlers", () => {
-  it("a function serves only its own module", async () => {
-    const identity = createServerlessHandler("identity", env())
-    server = createServer((req, res) => void identity(req, res))
-    await new Promise<void>((resolve) =>
-      server!.listen(0, "127.0.0.1", resolve)
-    )
-    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+  it("serves every module and answers the standard 404", async () => {
+    const base = await serve(env())
     expect((await fetch(`${base}/me`)).status).toBe(401)
-    const health = await fetch(`${base}/health`)
-    expect(health.status).toBe(404)
-    expect(await health.json()).toMatchObject({ code: "NOT_FOUND" })
-    expect(() => createServerlessHandler("nope", env())).toThrow()
+    expect((await fetch(`${base}/health`)).status).toBe(200)
+    const unknown = await fetch(`${base}/nope`)
+    expect(unknown.status).toBe(404)
+    expect(await unknown.json()).toMatchObject({ code: "NOT_FOUND" })
     await disconnectDatabase()
   })
 

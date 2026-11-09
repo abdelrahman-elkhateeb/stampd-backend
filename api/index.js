@@ -1,5 +1,5 @@
-// Vercel Function for the "leave" module (see "rewrites" in vercel.json and
+// The Vercel Function: vercel.json rewrites every path here (see
 // src/serverless.ts), compiled to dist/ by the "vercel-build" script.
 import { createServerlessHandler } from "../dist/serverless.js"
 
-export default createServerlessHandler("leave")
+export default createServerlessHandler()
